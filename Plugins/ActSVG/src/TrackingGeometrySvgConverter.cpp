@@ -276,7 +276,7 @@ struct Visitor : TrackingGeometryVisitor {
           static_cast<actsvg::scalar>(boundValues[eMaxR]);
       pVolume._bound_values.at(svgBv::zPos) =
           static_cast<actsvg::scalar>(volumeTransform.translation().z());
-          pVolume._bound_values.at(svgBv::zHalf) =
+      pVolume._bound_values.at(svgBv::zHalf) =
           static_cast<actsvg::scalar>(boundValues[eHalfLengthZ]);
       pVolume._bound_values.at(svgBv::phiSec) =
           static_cast<actsvg::scalar>(boundValues[eHalfPhiSector]);
@@ -303,12 +303,10 @@ std::vector<actsvg::svg::object> drawTrackingGeometry(
     const GeometryContext& gctx, const TrackingGeometry& tGeometry,
     std::variant<actsvg::views::x_y, actsvg::views::z_r> view,
     bool drawSurfaces, bool highlightMaterial) {
-  /*
-  if (tGeometry.generation() != TrackingGeometry::Generation::Three) {
+  if (tGeometry.geometryVersion() != TrackingGeometry::GeometryVersion::Gen3) {
     throw std::invalid_argument{
         "Input tracking geometry needs to have been built in Gen3 mode"};
   }
-  */
 
   Visitor visitor(gctx);
   tGeometry.apply(visitor);
