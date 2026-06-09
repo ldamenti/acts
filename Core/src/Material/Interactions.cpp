@@ -194,6 +194,8 @@ float Acts::computeEnergyLossBethe(const MaterialSlab& slab, float m,
   // identical to the prefactor epsilon for the most probable value.
   const float running =
       std::log(u / I) + std::log(wmax / I) - 2.0f * rq.beta2 - 2.0f * dhalf;
+
+  std::cout << "Devo modificare qui per avere l'energy loss di cmssw" << std::endl;
   return eps * running;
 }
 
