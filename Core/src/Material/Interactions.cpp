@@ -15,6 +15,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <iostream>
 
 using namespace Acts::UnitLiterals;
 
@@ -192,11 +193,36 @@ float Acts::computeEnergyLossBethe(const MaterialSlab& slab, float m,
   // instead of an energy loss per length.
   // the required modification only change the prefactor which becomes
   // identical to the prefactor epsilon for the most probable value.
-  const float running =
-      std::log(u / I) + std::log(wmax / I) - 2.0f * rq.beta2 - 2.0f * dhalf;
+  const float running = std::log(u / I) + std::log(wmax / I) - 2.0f * rq.beta2 - 2.0f * dhalf;
 
-  std::cout << "Devo modificare qui per avere l'energy loss di cmssw" << std::endl;
-  return eps * running;
+  // =========== cmssw descrition of the Bethe Bloch formula (NOT the prefactor) ================
+  // NOTE: code from https://github.com/cms-sw/cmssw/blob/b779e38cd5e35c2b2457180ca10c8f5d79ae269f/TrackingTools/MaterialEffects/src/EnergyLossUpdator.cc#L63
+  const Float m2 = m * m;
+  const Float p2 = (absQ / qOverP) * (absQ / qOverP);
+  constexpr Float emass = 0.511e-3;
+  constexpr Float poti = 16.e-9 * 10.75;                 // = 16 eV * Z**0.9, for Si Z=14
+  const Float eplasma = 28.816e-9 * sqrt(2.33 * 0.498);  // 28.816 eV * sqrt(rho*(Z/A)) for Si
+  const Float delta0 = 2 * log(eplasma / poti) - 1.;
+
+  // calculate general physics things
+  Float im2 = Float(1.) / m2;
+  Float e2 = p2 + m2;
+  Float e = std::sqrt(e2);
+  Float beta2 = p2 / e2;
+  Float eta2 = p2 * im2;
+  Float ratio2 = (emass * emass) * im2;
+  Float emax = Float(2.) * emass * eta2 / (Float(1.) + Float(2.) * emass * e * im2 + ratio2);
+
+  Float dEdx = (unsafe_logf<2>(Float(2.) * emass * emax / (poti * poti)) - Float(2.) * (beta2)-delta0);
+
+  // ===============================================================================================
+
+  std::cout << "Common prefactor: " << eps << std::endl;
+  std::cout << "ACTS value: " << running << std::endl;
+  std::cout << "CMSSW value: " << dEdx << std::endl;
+
+
+  return eps * dEdx;
 }
 
 float Acts::deriveEnergyLossBetheQOverP(const MaterialSlab& slab, float m,
