@@ -197,23 +197,23 @@ float Acts::computeEnergyLossBethe(const MaterialSlab& slab, float m,
 
   // =========== cmssw descrition of the Bethe Bloch formula (NOT the prefactor) ================
   // NOTE: code from https://github.com/cms-sw/cmssw/blob/b779e38cd5e35c2b2457180ca10c8f5d79ae269f/TrackingTools/MaterialEffects/src/EnergyLossUpdator.cc#L63
-  const Float m2 = m * m;
-  const Float p2 = (absQ / qOverP) * (absQ / qOverP);
-  constexpr Float emass = 0.511e-3;
-  constexpr Float poti = 16.e-9 * 10.75;                 // = 16 eV * Z**0.9, for Si Z=14
-  const Float eplasma = 28.816e-9 * sqrt(2.33 * 0.498);  // 28.816 eV * sqrt(rho*(Z/A)) for Si
-  const Float delta0 = 2 * log(eplasma / poti) - 1.;
+  const float m2 = m * m;
+  const float p2 = (absQ / qOverP) * (absQ / qOverP);
+  constexpr float emass = 0.511e-3;
+  constexpr float poti = 16.e-9 * 10.75;                 // = 16 eV * Z**0.9, for Si Z=14
+  const float eplasma = 28.816e-9 * sqrt(2.33 * 0.498);  // 28.816 eV * sqrt(rho*(Z/A)) for Si
+  const float delta0 = 2 * log(eplasma / poti) - 1.;
 
   // calculate general physics things
-  Float im2 = Float(1.) / m2;
-  Float e2 = p2 + m2;
-  Float e = std::sqrt(e2);
-  Float beta2 = p2 / e2;
-  Float eta2 = p2 * im2;
-  Float ratio2 = (emass * emass) * im2;
-  Float emax = Float(2.) * emass * eta2 / (Float(1.) + Float(2.) * emass * e * im2 + ratio2);
+  float im2 = Float(1.) / m2;
+  float e2 = p2 + m2;
+  float e = std::sqrt(e2);
+  float beta2 = p2 / e2;
+  float eta2 = p2 * im2;
+  float ratio2 = (emass * emass) * im2;
+  float emax = Float(2.) * emass * eta2 / (Float(1.) + Float(2.) * emass * e * im2 + ratio2);
 
-  Float dEdx = (unsafe_logf<2>(Float(2.) * emass * emax / (poti * poti)) - Float(2.) * (beta2)-delta0);
+  float dEdx = (unsafe_logf<2>(Float(2.) * emass * emax / (poti * poti)) - Float(2.) * (beta2)-delta0);
 
   // ===============================================================================================
 
