@@ -194,7 +194,32 @@ float Acts::computeEnergyLossBethe(const MaterialSlab& slab, float m,
   // identical to the prefactor epsilon for the most probable value.
   const float running =
       std::log(u / I) + std::log(wmax / I) - 2.0f * rq.beta2 - 2.0f * dhalf;
-  return eps * running;
+
+  // =========== cmssw descrition of the Bethe Bloch formula (NOT the prefactor) ================
+  // NOTE: code from https://github.com/cms-sw/cmssw/blob/b779e38cd5e35c2b2457180ca10c8f5d79ae269f/TrackingTools/MaterialEffects/src/EnergyLossUpdator.cc#L63
+  const float m2 = m * m;
+  const float p2 = (absQ / qOverP) * (absQ / qOverP);
+  constexpr float emass = 0.511e-3;
+  constexpr float poti = 16.e-9 * 10.75;
+  const float eplasma = 28.816e-9 * std::sqrt(2.33 * 0.498);
+  const float delta0 = 2 * std::log(eplasma / poti) - 1.;
+
+  float im2 = 1.f / m2;
+  float e2 = p2 + m2;
+  float e = std::sqrt(e2);
+  float beta2 = p2 / e2;
+  float eta2 = p2 * im2;
+  float ratio2 = (emass * emass) * im2;
+  float emax = 2.f * emass * eta2 / (1.f + 2.f * emass * e * im2 + ratio2);
+
+  float dEdx =
+      std::log(2.f * emass * emax / (poti * poti)) - 2.f * beta2 - delta0;
+
+  std::cout << "Common prefactor: " << eps << std::endl;
+  std::cout << "ACTS value: " << running << std::endl;
+  std::cout << "CMSSW value: " << dEdx << std::endl;
+
+  return eps * dEdx;
 }
 
 float Acts::deriveEnergyLossBetheQOverP(const MaterialSlab& slab, float m,
