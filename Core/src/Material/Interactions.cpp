@@ -205,15 +205,15 @@ float Acts::computeEnergyLossBethe(const MaterialSlab& slab, float m,
   const float delta0 = 2 * log(eplasma / poti) - 1.;
 
   // calculate general physics things
-  float im2 = Float(1.) / m2;
+  float im2 = 1.f / m2;
   float e2 = p2 + m2;
   float e = std::sqrt(e2);
   float beta2 = p2 / e2;
   float eta2 = p2 * im2;
   float ratio2 = (emass * emass) * im2;
-  float emax = Float(2.) * emass * eta2 / (Float(1.) + Float(2.) * emass * e * im2 + ratio2);
+  float emax = 2.f * emass * eta2 / (1.f + 2.f * emass * e * im2 + ratio2);
 
-  float dEdx = (unsafe_logf<2>(Float(2.) * emass * emax / (poti * poti)) - Float(2.) * (beta2)-delta0);
+  float dEdx = std::log(2.f * emass * emax / (poti * poti)) - 2.f * beta2 - delta0;
 
   // ===============================================================================================
 
