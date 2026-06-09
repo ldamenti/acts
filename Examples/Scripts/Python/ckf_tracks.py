@@ -5,7 +5,8 @@ from typing import Optional
 
 import acts
 from acts import UnitConstants as u
-from acts.examples import GenericDetector, RootParticleReader
+from acts.examples import GenericDetector
+from acts.examples.root import RootParticleReader
 
 
 def runCKFTracks(
@@ -64,8 +65,8 @@ def runCKFTracks(
             rnd=rnd,
         )
     else:
-        acts.logging.getLogger("CKFExample").info(
-            "Reading particles from %s", inputParticlePath.resolve()
+        acts.getDefaultLogger("CKFExample", acts.logging.INFO).info(
+            "Reading particles from {}", inputParticlePath.resolve()
         )
         assert inputParticlePath.exists()
         s.addReader(
@@ -105,7 +106,7 @@ def runCKFTracks(
         trackingGeometry,
         field,
         TrackSmearingSigmas(  # only used by SeedingAlgorithm.TruthSmeared
-            # zero eveything so the CKF has a chance to find the measurements
+            # zero everything so the CKF has a chance to find the measurements
             loc0=0,
             loc0PtA=0,
             loc0PtB=0,
@@ -136,7 +137,7 @@ def runCKFTracks(
             else (
                 SeedingAlgorithm.TruthEstimated
                 if truthEstimatedSeeded
-                else SeedingAlgorithm.Default
+                else SeedingAlgorithm.GridTriplet
             )
         ),
         initialSigmas=[
@@ -144,10 +145,11 @@ def runCKFTracks(
             1 * u.mm,
             1 * u.degree,
             1 * u.degree,
-            0.1 * u.e / u.GeV,
+            0 * u.e / u.GeV,
             1 * u.ns,
         ],
-        initialSigmaPtRel=0.01,
+        initialSigmaQoverPt=0.1 * u.e / u.GeV,
+        initialSigmaPtRel=0.1,
         initialVarInflation=[1.0] * 6,
         geoSelectionConfigFile=geometrySelection,
         outputDirRoot=outputDir,
@@ -198,10 +200,8 @@ if "__main__" == __name__:
         trackingGeometry,
         decorators,
         field=field,
-        geometrySelection=srcdir
-        / "Examples/Algorithms/TrackFinding/share/geoSelection-genericDetector.json",
-        digiConfigFile=srcdir
-        / "Examples/Algorithms/Digitization/share/default-smearing-config-generic.json",
+        geometrySelection=srcdir / "Examples/Configs/generic-seeding-config.json",
+        digiConfigFile=srcdir / "Examples/Configs/generic-digi-smearing-config.json",
         truthSmearedSeeded=False,
         truthEstimatedSeeded=False,
         inputParticlePath=inputParticlePath,

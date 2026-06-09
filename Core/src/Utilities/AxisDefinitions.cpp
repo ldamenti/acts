@@ -12,7 +12,7 @@
 #include <ostream>
 #include <stdexcept>
 
-namespace Acts {
+using namespace Acts;
 
 namespace {
 
@@ -35,32 +35,78 @@ const std::vector<AxisDirection> s_axisDirections = {
 
 }  // namespace
 
-const std::vector<AxisDirection>& allAxisDirections() {
+const std::vector<AxisDirection>& Acts::allAxisDirections() {
   return s_axisDirections;
 }
 
-AxisDirection axisDirectionFromName(const std::string& name) {
+AxisDirection Acts::axisDirectionFromName(const std::string& name) {
   auto it = std::ranges::find(s_axisDirectionNames, name);
   if (it == s_axisDirectionNames.end()) {
     // Legacy binning check - this should be removed once BinUtility is gone
     it = std::ranges::find(s_legacyBinningValueNames, name);
     if (it == s_legacyBinningValueNames.end()) {
+      // both legacy and current failed
       throw std::invalid_argument("Unknown AxisDirection value name: " + name);
     }
-    // both legacy and current failed
+    return static_cast<AxisDirection>(
+        std::distance(s_legacyBinningValueNames.begin(), it));
   }
   return static_cast<AxisDirection>(
       std::distance(s_axisDirectionNames.begin(), it));
 }
 
-const std::string& axisDirectionName(AxisDirection aDir) {
+const std::string& Acts::axisDirectionName(AxisDirection aDir) {
   return s_axisDirectionNames.at(
       static_cast<std::underlying_type_t<AxisDirection>>(aDir));
 }
 
-std::ostream& operator<<(std::ostream& os, AxisDirection aDir) {
+std::string Acts::axesDirectionName(const std::vector<AxisDirection>& manyDir) {
+  std::string name = "{";
+  for (const auto& dir : manyDir) {
+    name += axisDirectionName(dir);
+    if (&dir != &manyDir.back()) {
+      name += ", ";
+    }
+  }
+  name += "}";
+  return name;
+}
+
+std::ostream& Acts::operator<<(std::ostream& os, AxisDirection aDir) {
   os << axisDirectionName(aDir);
   return os;
 }
 
-}  // namespace Acts
+std::ostream& Acts::operator<<(std::ostream& os,
+                               const std::vector<AxisDirection>& manyDir) {
+  os << axesDirectionName(manyDir);
+  return os;
+}
+
+std::ostream& Acts::operator<<(std::ostream& os, AxisBoundaryType bdt) {
+  using enum AxisBoundaryType;
+  switch (bdt) {
+    case Open:
+      os << "Open";
+      break;
+    case Bound:
+      os << "Bound";
+      break;
+    case Closed:
+      os << "Closed";
+      break;
+  }
+  return os;
+}
+
+std::ostream& Acts::operator<<(std::ostream& os, AxisType type) {
+  switch (type) {
+    case AxisType::Equidistant:
+      os << "Equidistant";
+      break;
+    case AxisType::Variable:
+      os << "Variable";
+      break;
+  }
+  return os;
+}

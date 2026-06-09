@@ -16,10 +16,8 @@
 #include "Acts/Vertexing/IterativeVertexFinder.hpp"
 #include "Acts/Vertexing/TrackAtVertex.hpp"
 #include "Acts/Vertexing/Vertex.hpp"
-#include "ActsExamples/EventData/ProtoVertex.hpp"
 #include "ActsExamples/Framework/AlgorithmContext.hpp"
 
-#include <chrono>
 #include <ostream>
 #include <stdexcept>
 #include <system_error>
@@ -29,8 +27,8 @@
 namespace ActsExamples {
 
 IterativeVertexFinderAlgorithm::IterativeVertexFinderAlgorithm(
-    const Config& config, Acts::Logging::Level level)
-    : IAlgorithm("IterativeVertexFinder", level), m_cfg(config) {
+    const Config& config, std::unique_ptr<const Acts::Logger> logger)
+    : IAlgorithm("IterativeVertexFinder", std::move(logger)), m_cfg(config) {
   if (m_cfg.inputTrackParameters.empty()) {
     throw std::invalid_argument("Missing input track parameter collection");
   }
@@ -115,7 +113,7 @@ ProcessCode IterativeVertexFinderAlgorithm::execute(
   // find vertices
   auto result = finder.find(inputTracks, finderOpts, state);
 
-  VertexCollection vertices;
+  VertexContainer vertices;
   if (result.ok()) {
     vertices = std::move(result.value());
   } else {
@@ -123,7 +121,7 @@ ProcessCode IterativeVertexFinderAlgorithm::execute(
   }
 
   // show some debug output
-  ACTS_INFO("Found " << vertices.size() << " vertices in event");
+  ACTS_DEBUG("Found " << vertices.size() << " vertices in event");
   for (const auto& vtx : vertices) {
     ACTS_DEBUG("Found vertex at " << vtx.fullPosition().transpose() << " with "
                                   << vtx.tracks().size() << " tracks.");

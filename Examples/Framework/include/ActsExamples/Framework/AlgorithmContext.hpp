@@ -8,10 +8,10 @@
 
 #pragma once
 
-#include "Acts/Plugins/FpeMonitoring/FpeMonitor.hpp"
-#include <Acts/Geometry/GeometryContext.hpp>
-#include <Acts/MagneticField/MagneticFieldContext.hpp>
-#include <Acts/Utilities/CalibrationContext.hpp>
+#include "Acts/Geometry/GeometryContext.hpp"
+#include "Acts/MagneticField/MagneticFieldContext.hpp"
+#include "Acts/Utilities/CalibrationContext.hpp"
+#include "ActsPlugins/FpeMonitoring/FpeMonitor.hpp"
 
 namespace ActsExamples {
 
@@ -24,11 +24,16 @@ struct AlgorithmContext {
   /// @param alg is the algorithm/service/writer number
   /// @param event is the event number
   /// @param store is the event-wise event store
+  /// @param thread is the thread number
   ///
   /// @note the event dependent contexts are to be added by the
   /// Sequencer::m_decorators list
-  AlgorithmContext(std::size_t alg, std::size_t event, WhiteBoard& store)
-      : algorithmNumber(alg), eventNumber(event), eventStore(store) {}
+  AlgorithmContext(std::size_t alg, std::size_t event, WhiteBoard& store,
+                   std::size_t thread)
+      : algorithmNumber(alg),
+        eventNumber(event),
+        eventStore(store),
+        threadId{thread} {}
 
   /// @brief ++operator overload to increase the algorithm number
   AlgorithmContext& operator++() {
@@ -36,15 +41,18 @@ struct AlgorithmContext {
     return (*this);
   }
 
-  std::size_t algorithmNumber;       ///< Unique algorithm identifier
-  std::size_t eventNumber;           ///< Unique event identifier
-  WhiteBoard& eventStore;            ///< Per-event data store
-  Acts::GeometryContext geoContext;  ///< Per-event geometry context
+  std::size_t algorithmNumber;  ///< Unique algorithm identifier
+  std::size_t eventNumber;      ///< Unique event identifier
+  WhiteBoard& eventStore;       ///< Per-event data store
+  Acts::GeometryContext geoContext{
+      Acts::GeometryContext::
+          dangerouslyDefaultConstruct()};  ///< Per-event geometry context
   Acts::MagneticFieldContext
       magFieldContext;                    ///< Per-event magnetic Field context
   Acts::CalibrationContext calibContext;  ///< Per-event calibration context
+  std::size_t threadId;                   ///< Thread ID
 
-  Acts::FpeMonitor* fpeMonitor = nullptr;
+  ActsPlugins::FpeMonitor* fpeMonitor = nullptr;
 };
 
 }  // namespace ActsExamples

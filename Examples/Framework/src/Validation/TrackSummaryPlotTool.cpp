@@ -8,125 +8,107 @@
 
 #include "ActsExamples/Validation/TrackSummaryPlotTool.hpp"
 
-#include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Utilities/VectorHelpers.hpp"
 
-#include <TProfile.h>
+#include <format>
 
-ActsExamples::TrackSummaryPlotTool::TrackSummaryPlotTool(
-    const ActsExamples::TrackSummaryPlotTool::Config& cfg,
-    Acts::Logging::Level lvl)
+using namespace Acts::Experimental;
+using namespace ActsExamples;
+
+namespace {
+
+ProfileHistogram1 makeProfile(
+    const TrackSummaryPlotTool::TrackSummaryPlotTool::Config& cfg,
+    std::string name, const std::string& title,
+    const Acts::Experimental::AxisVariant& ax) {
+  if (!cfg.prefix.empty()) {
+    name = std::format("{}_{}", cfg.prefix, name);
+  }
+  const auto& yAxis = cfg.varBinning.at("Num");
+  Acts::Range1D<double> yRange{yAxis.bin(0).lower(),
+                               yAxis.bin(yAxis.size() - 1).upper()};
+  return ProfileHistogram1(name, title, {ax}, yAxis.metadata(), yRange);
+}
+
+}  // namespace
+
+namespace ActsExamples {
+
+TrackSummaryPlotTool::TrackSummaryPlotTool(
+    const TrackSummaryPlotTool::Config& cfg, Acts::Logging::Level lvl)
     : m_cfg(cfg),
-      m_logger(Acts::getDefaultLogger("TrackSummaryPlotTool", lvl)) {}
+      m_logger(Acts::getDefaultLogger("TrackSummaryPlotTool", lvl)) {
+  ACTS_DEBUG(
+      "Initialize the histograms for track info plots"
+      << (m_cfg.prefix.empty() ? "" : ", use prefix '" + m_cfg.prefix + "'"));
 
-void ActsExamples::TrackSummaryPlotTool::book(
-    TrackSummaryPlotTool::TrackSummaryPlotCache& trackSummaryPlotCache,
-    const std::string& prefix) const {
-  PlotHelpers::Binning bEta = m_cfg.varBinning.at("Eta");
-  PlotHelpers::Binning bPt = m_cfg.varBinning.at("Pt");
-  PlotHelpers::Binning bNum = m_cfg.varBinning.at("Num");
-  ACTS_DEBUG("Initialize the histograms for track info plots, use prefix '"
-             << prefix << "'");
-  auto addPrefix = [&](const std::string& name) {
-    return prefix.empty() ? name : prefix + "_" + name;
-  };
-  // number of track states versus eta
-  trackSummaryPlotCache.nStates_vs_eta =
-      PlotHelpers::bookProf(addPrefix("nStates_vs_eta").c_str(),
-                            "Number of total states vs. #eta", bEta, bNum);
-  // number of measurements versus eta
-  trackSummaryPlotCache.nMeasurements_vs_eta =
-      PlotHelpers::bookProf(addPrefix("nMeasurements_vs_eta").c_str(),
-                            "Number of measurements vs. #eta", bEta, bNum);
-  // number of holes versus eta
-  trackSummaryPlotCache.nHoles_vs_eta =
-      PlotHelpers::bookProf(addPrefix("nHoles_vs_eta").c_str(),
-                            "Number of holes vs. #eta", bEta, bNum);
-  // number of outliers versus eta
-  trackSummaryPlotCache.nOutliers_vs_eta =
-      PlotHelpers::bookProf(addPrefix("nOutliers_vs_eta").c_str(),
-                            "Number of outliers vs. #eta", bEta, bNum);
-  // number of Shared Hits versus eta
-  trackSummaryPlotCache.nSharedHits_vs_eta =
-      PlotHelpers::bookProf(addPrefix("nSharedHits_vs_eta").c_str(),
-                            "Number of Shared Hits vs. #eta", bEta, bNum);
-  // number of track states versus pt
-  trackSummaryPlotCache.nStates_vs_pt =
-      PlotHelpers::bookProf(addPrefix("nStates_vs_pT").c_str(),
-                            "Number of total states vs. pT", bPt, bNum);
-  // number of measurements versus pt
-  trackSummaryPlotCache.nMeasurements_vs_pt =
-      PlotHelpers::bookProf(addPrefix("nMeasurements_vs_pT").c_str(),
-                            "Number of measurements vs. pT", bPt, bNum);
-  // number of holes versus pt
-  trackSummaryPlotCache.nHoles_vs_pt = PlotHelpers::bookProf(
-      addPrefix("nHoles_vs_pT").c_str(), "Number of holes vs. pT", bPt, bNum);
-  // number of outliers versus pt
-  trackSummaryPlotCache.nOutliers_vs_pt =
-      PlotHelpers::bookProf(addPrefix("nOutliers_vs_pT").c_str(),
-                            "Number of outliers vs. pT", bPt, bNum);
-  // number of Shared Hits versus pt
-  trackSummaryPlotCache.nSharedHits_vs_pt =
-      PlotHelpers::bookProf(addPrefix("nSharedHits_vs_pT").c_str(),
-                            "Number of Shared Hits vs. pT", bPt, bNum);
+  m_profiles.insert(
+      {"nStates_vs_eta",
+       makeProfile(m_cfg, "nStates_vs_eta", "Number of total states vs. #eta",
+                   m_cfg.varBinning.at("Eta"))});
+  m_profiles.insert(
+      {"nMeasurements_vs_eta", makeProfile(m_cfg, "nMeasurements_vs_eta",
+                                           "Number of measurements vs. #eta",
+                                           m_cfg.varBinning.at("Eta"))});
+  m_profiles.insert({"nHoles_vs_eta", makeProfile(m_cfg, "nHoles_vs_eta",
+                                                  "Number of holes vs. #eta",
+                                                  m_cfg.varBinning.at("Eta"))});
+  m_profiles.insert(
+      {"nOutliers_vs_eta",
+       makeProfile(m_cfg, "nOutliers_vs_eta", "Number of outliers vs. #eta",
+                   m_cfg.varBinning.at("Eta"))});
+  m_profiles.insert(
+      {"nSharedHits_vs_eta", makeProfile(m_cfg, "nSharedHits_vs_eta",
+                                         "Number of Shared Hits vs. #eta",
+                                         m_cfg.varBinning.at("Eta"))});
+  m_profiles.insert(
+      {"nStates_vs_pT",
+       makeProfile(m_cfg, "nStates_vs_pT", "Number of total states vs. pT",
+                   m_cfg.varBinning.at("Pt"))});
+  m_profiles.insert(
+      {"nMeasurements_vs_pT", makeProfile(m_cfg, "nMeasurements_vs_pT",
+                                          "Number of measurements vs. pT",
+                                          m_cfg.varBinning.at("Pt"))});
+  m_profiles.insert({"nHoles_vs_pT", makeProfile(m_cfg, "nHoles_vs_pT",
+                                                 "Number of holes vs. pT",
+                                                 m_cfg.varBinning.at("Pt"))});
+  m_profiles.insert(
+      {"nOutliers_vs_pT",
+       makeProfile(m_cfg, "nOutliers_vs_pT", "Number of outliers vs. pT",
+                   m_cfg.varBinning.at("Pt"))});
+  m_profiles.insert(
+      {"nSharedHits_vs_pT",
+       makeProfile(m_cfg, "nSharedHits_vs_pT", "Number of Shared Hits vs. pT",
+                   m_cfg.varBinning.at("Pt"))});
 }
 
-void ActsExamples::TrackSummaryPlotTool::clear(
-    TrackSummaryPlotCache& trackSummaryPlotCache) const {
-  delete trackSummaryPlotCache.nStates_vs_eta;
-  delete trackSummaryPlotCache.nMeasurements_vs_eta;
-  delete trackSummaryPlotCache.nOutliers_vs_eta;
-  delete trackSummaryPlotCache.nHoles_vs_eta;
-  delete trackSummaryPlotCache.nSharedHits_vs_eta;
-  delete trackSummaryPlotCache.nStates_vs_pt;
-  delete trackSummaryPlotCache.nMeasurements_vs_pt;
-  delete trackSummaryPlotCache.nOutliers_vs_pt;
-  delete trackSummaryPlotCache.nHoles_vs_pt;
-  delete trackSummaryPlotCache.nSharedHits_vs_pt;
-}
-
-void ActsExamples::TrackSummaryPlotTool::write(
-    const TrackSummaryPlotTool::TrackSummaryPlotCache& trackSummaryPlotCache)
-    const {
-  ACTS_DEBUG("Write the plots to output file.");
-  trackSummaryPlotCache.nStates_vs_eta->Write();
-  trackSummaryPlotCache.nMeasurements_vs_eta->Write();
-  trackSummaryPlotCache.nOutliers_vs_eta->Write();
-  trackSummaryPlotCache.nHoles_vs_eta->Write();
-  trackSummaryPlotCache.nSharedHits_vs_eta->Write();
-  trackSummaryPlotCache.nStates_vs_pt->Write();
-  trackSummaryPlotCache.nMeasurements_vs_pt->Write();
-  trackSummaryPlotCache.nOutliers_vs_pt->Write();
-  trackSummaryPlotCache.nHoles_vs_pt->Write();
-  trackSummaryPlotCache.nSharedHits_vs_pt->Write();
-}
-
-void ActsExamples::TrackSummaryPlotTool::fill(
-    TrackSummaryPlotTool::TrackSummaryPlotCache& trackSummaryPlotCache,
+void TrackSummaryPlotTool::fill(
     const Acts::BoundTrackParameters& fittedParameters, std::size_t nStates,
     std::size_t nMeasurements, std::size_t nOutliers, std::size_t nHoles,
-    std::size_t nSharedHits) const {
+    std::size_t nSharedHits) {
   using Acts::VectorHelpers::eta;
   using Acts::VectorHelpers::perp;
   const auto momentum = fittedParameters.momentum();
   const double fit_eta = eta(momentum);
   const double fit_pT = perp(momentum);
 
-  PlotHelpers::fillProf(trackSummaryPlotCache.nStates_vs_eta, fit_eta, nStates);
-  PlotHelpers::fillProf(trackSummaryPlotCache.nMeasurements_vs_eta, fit_eta,
-                        nMeasurements);
-  PlotHelpers::fillProf(trackSummaryPlotCache.nOutliers_vs_eta, fit_eta,
-                        nOutliers);
-  PlotHelpers::fillProf(trackSummaryPlotCache.nHoles_vs_eta, fit_eta, nHoles);
-  PlotHelpers::fillProf(trackSummaryPlotCache.nSharedHits_vs_eta, fit_eta,
-                        nSharedHits);
+  m_profiles.at("nStates_vs_eta").fill({fit_eta}, static_cast<double>(nStates));
+  m_profiles.at("nMeasurements_vs_eta")
+      .fill({fit_eta}, static_cast<double>(nMeasurements));
+  m_profiles.at("nOutliers_vs_eta")
+      .fill({fit_eta}, static_cast<double>(nOutliers));
+  m_profiles.at("nHoles_vs_eta").fill({fit_eta}, static_cast<double>(nHoles));
+  m_profiles.at("nSharedHits_vs_eta")
+      .fill({fit_eta}, static_cast<double>(nSharedHits));
 
-  PlotHelpers::fillProf(trackSummaryPlotCache.nStates_vs_pt, fit_pT, nStates);
-  PlotHelpers::fillProf(trackSummaryPlotCache.nMeasurements_vs_pt, fit_pT,
-                        nMeasurements);
-  PlotHelpers::fillProf(trackSummaryPlotCache.nOutliers_vs_pt, fit_pT,
-                        nOutliers);
-  PlotHelpers::fillProf(trackSummaryPlotCache.nHoles_vs_pt, fit_pT, nHoles);
-  PlotHelpers::fillProf(trackSummaryPlotCache.nSharedHits_vs_pt, fit_pT,
-                        nSharedHits);
+  m_profiles.at("nStates_vs_pT").fill({fit_pT}, static_cast<double>(nStates));
+  m_profiles.at("nMeasurements_vs_pT")
+      .fill({fit_pT}, static_cast<double>(nMeasurements));
+  m_profiles.at("nOutliers_vs_pT")
+      .fill({fit_pT}, static_cast<double>(nOutliers));
+  m_profiles.at("nHoles_vs_pT").fill({fit_pT}, static_cast<double>(nHoles));
+  m_profiles.at("nSharedHits_vs_pT")
+      .fill({fit_pT}, static_cast<double>(nSharedHits));
 }
+
+}  // namespace ActsExamples

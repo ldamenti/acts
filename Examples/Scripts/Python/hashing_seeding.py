@@ -21,6 +21,9 @@ from acts.examples.reconstruction import (
     SeedingAlgorithm,
 )
 
+from acts.examples.root import (
+    RootSpacePointWriter,
+)
 from pathlib import Path
 
 from typing import Optional
@@ -36,13 +39,13 @@ class Config:
         self,
         mu: int = None,
         bucketSize: int = 100,
-        maxSeedsPerSpM: int = 1000,
+        maxSeedsPerSpM: int = 10,
         detector: DetectorName = DetectorName.generic,
-        seedingAlgorithm: SeedingAlgorithm = SeedingAlgorithm.Hashing,
+        seedingAlgorithm: SeedingAlgorithm = SeedingAlgorithm.HashingPrototype,
         metric: str = HashingMetric.dphi,
         annoySeed: int = 123456789,
-        zBins: int = 100_000,
-        phiBins: int = 0,
+        zBins: int = 0,
+        phiBins: int = 100,
     ):
         self.mu = mu
         self.bucketSize = bucketSize
@@ -58,7 +61,7 @@ class Config:
         self.zBins = zBins
         self.phiBins = phiBins
 
-        if seedingAlgorithm == SeedingAlgorithm.Default:
+        if seedingAlgorithm == SeedingAlgorithm.GridTriplet:
             self.bucketSize = 0
             self.metric = HashingMetric.dphi
             self.annoySeed = 123456789
@@ -112,7 +115,7 @@ class Config:
         return outDir
 
     def getDetectorInfo(self):
-        actsExamplesDir = getActsExamplesDirectory()
+        actsExamplesDir = Path(__file__).parent.parent.parent
 
         if self.detector == DetectorName.ODD:
             from acts.examples.odd import (
@@ -123,11 +126,13 @@ class Config:
             geoDir = getOpenDataDetectorDirectory()
 
             oddMaterialMap = geoDir / "data/odd-material-maps.root"
-            oddDigiConfig = geoDir / "config/odd-digi-smearing-config.json"
-            oddSeedingSel = geoDir / "config/odd-seeding-config.json"
+            oddDigiConfig = actsExamplesDir / "Configs/odd-digi-smearing-config.json"
+            oddSeedingSel = actsExamplesDir / "Configs/odd-seeding-config.json"
             oddMaterialDeco = acts.IMaterialDecorator.fromFile(oddMaterialMap)
 
-            detector = getOpenDataDetector(odd_dir=geoDir, mdecorator=oddMaterialDeco)
+            detector = getOpenDataDetector(
+                odd_dir=geoDir, materialDecorator=oddMaterialDeco
+            )
             trackingGeometry = detector.trackingGeometry()
 
             digiConfig = oddDigiConfig
@@ -139,13 +144,9 @@ class Config:
 
             detector = acts.examples.GenericDetector()
             trackingGeometry = detector.trackingGeometry()
-            digiConfig = (
-                actsExamplesDir
-                / "Algorithms/Digitization/share/default-smearing-config-generic.json"
-            )
+            digiConfig = actsExamplesDir / "Configs/generic-digi-smearing-config.json"
             geoSelectionConfigFile = (
-                actsExamplesDir
-                / "Algorithms/TrackFinding/share/geoSelection-genericDetector.json"
+                actsExamplesDir / "Configs/generic-seeding-config.json"
             )
         else:
             exit("Detector not supported")
@@ -155,10 +156,6 @@ class Config:
 
 def extractEnumName(enumvar):
     return str(enumvar).split(".")[-1]
-
-
-def getActsExamplesDirectory():
-    return Path(__file__).parent.parent.parent
 
 
 def runHashingSeeding(
@@ -300,8 +297,7 @@ def runHashingSeeding(
 
 
 if __name__ == "__main__":
-    eta = 4
-    # eta = 2.5
+    eta = 3
 
     parser = argparse.ArgumentParser(
         description="Example script to run seed finding with hashing"
@@ -313,12 +309,12 @@ if __name__ == "__main__":
         type=int,
         default=20,
     )
-    parser.add_argument("--maxSeedsPerSpM", type=int, default=1000)
-    parser.add_argument("--seedingAlgorithm", type=str, default="Hashing")
+    parser.add_argument("--maxSeedsPerSpM", type=int, default=10)
+    parser.add_argument("--seedingAlgorithm", type=str, default="HashingPrototype")
     parser.add_argument("--saveFiles", type=bool, default=True)
     parser.add_argument("--annoySeed", type=int, default=123456789)
-    parser.add_argument("--zBins", type=int, default=100000)
-    parser.add_argument("--phiBins", type=int, default=0)
+    parser.add_argument("--zBins", type=int, default=0)
+    parser.add_argument("--phiBins", type=int, default=100)
     parser.add_argument("--metric", type=str, default="dphi")
     args = parser.parse_args()
 
@@ -387,21 +383,20 @@ if __name__ == "__main__":
     )
 
     logLevel = acts.logging.VERBOSE
-    rootSpacepointsWriter = acts.examples.RootSpacepointWriter(
+    rootSpacePointsWriter = RootSpacePointWriter(
         level=logLevel,
-        inputSpacepoints="spacepoints",
+        inputSpacePoints="spacepoints",
         filePath=str(outputDir / "spacepoints.root"),
     )
-    s.addWriter(rootSpacepointsWriter)
+    s.addWriter(rootSpacePointsWriter)
 
-    rootSeedsWriter = acts.examples.RootSeedWriter(
+    rootSeedsWriter = acts.examples.root.RootSeedWriter(
         level=logLevel,
         inputSeeds="seeds",
         filePath=str(outputDir / "seeds.root"),
     )
     s.addWriter(rootSeedsWriter)
 
-    # TrackFinding ERROR no intersection found; TrackExtrapolationError:2
     addCKFTracks(
         s,
         trackingGeometry,
@@ -411,9 +406,8 @@ if __name__ == "__main__":
             absEta=(None, eta),
             nMeasurementsMin=6,
         ),
-        outputDirRoot=outputDir,
-        writeTrajectories=False,
         twoWay=False,
+        outputDirRoot=outputDir,
     )
 
     s.run()

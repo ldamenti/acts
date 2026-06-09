@@ -6,12 +6,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#include "Acts/Utilities/AlgebraHelpers.hpp"
+#pragma once
 
-#include <bitset>
-#include <cstdint>
+#include "Acts/EventData/MultiTrajectory.hpp"
+
+#include "Acts/EventData/Types.hpp"
+
 #include <type_traits>
-#include <vector>
 
 #include <Eigen/Core>
 
@@ -22,7 +23,7 @@ template <typename F>
 void MultiTrajectory<D>::visitBackwards(IndexType iendpoint, F&& callable) const
   requires detail_lt::VisitorConcept<F, ConstTrackStateProxy>
 {
-  if (iendpoint == MultiTrajectoryTraits::kInvalid) {
+  if (iendpoint == kTrackIndexInvalid) {
     throw std::runtime_error(
         "Cannot visit backwards with kInvalid as endpoint");
   }

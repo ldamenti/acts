@@ -57,7 +57,7 @@ class GroupBy {
     using pointer = Group*;
     using reference = Group&;
 
-    constexpr GroupIterator(const GroupBy& groupBy, Iterator groupBegin)
+    constexpr GroupIterator(const GroupBy& groupBy, const Iterator& groupBegin)
         : m_groupBy(groupBy),
           m_groupBegin(groupBegin),
           m_groupEnd(groupBy.findEndOfGroup(groupBegin)) {}
@@ -95,7 +95,7 @@ class GroupBy {
   };
 
   /// Construct the group-by proxy for an iterator range.
-  constexpr GroupBy(Iterator begin, Iterator end,
+  constexpr GroupBy(const Iterator& begin, const Iterator& end,
                     KeyGetter keyGetter = KeyGetter())
       : m_begin(begin), m_end(end), m_keyGetter(std::move(keyGetter)) {}
   constexpr GroupIterator begin() const {
@@ -114,7 +114,7 @@ class GroupBy {
   /// This uses a linear search from the start position and thus has linear
   /// complexity in the group size. It does not assume any ordering of the
   /// underlying container and is a cache-friendly access pattern.
-  constexpr Iterator findEndOfGroup(Iterator start) const {
+  constexpr Iterator findEndOfGroup(const Iterator& start) const {
     // check for end that we can safely dereference the start iterator.
     if (start == m_end) {
       return start;
@@ -127,11 +127,12 @@ class GroupBy {
   }
 };
 
-/// Construct the group-by proxy for a container.
-template <typename Container, typename KeyGetter>
-auto makeGroupBy(const Container& container, KeyGetter keyGetter)
-    -> GroupBy<decltype(std::begin(container)), KeyGetter> {
-  return {std::begin(container), std::end(container), std::move(keyGetter)};
+/// Construct the group-by proxy for a range.
+template <std::ranges::range Range, typename KeyGetter>
+auto makeGroupBy(Range&& range, KeyGetter keyGetter)
+    -> GroupBy<decltype(std::ranges::begin(range)), KeyGetter> {
+  return {std::ranges::begin(range), std::ranges::end(range),
+          std::move(keyGetter)};
 }
 
 }  // namespace ActsExamples

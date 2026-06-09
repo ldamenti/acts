@@ -6,6 +6,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
+#pragma once
+
+#include "Acts/Utilities/Frustum.hpp"
+
 #include "Acts/Utilities/VectorHelpers.hpp"
 
 #include <numbers>
@@ -110,7 +114,7 @@ void Acts::Frustum<value_t, DIM, SIDES>::draw(IVisualization3D& helper,
     planeFarIXs.at(i - 1) = ixLine;
   }
 
-  std::array<VertexType, SIDES> points;
+  std::array<VertexType, SIDES> points{};
 
   for (std::size_t i = 0; i < std::size(planeFarIXs); i++) {
     std::size_t j = (i + 1) % std::size(planeFarIXs);
@@ -198,7 +202,7 @@ std::ostream& Acts::Frustum<value_t, DIM, SIDES>::svg(std::ostream& os,
   const VertexType far_dir = {m_normals[0].y(), -m_normals[0].x()};
   const VertexType far_point = m_normals[0] * far_distance;
 
-  std::array<VertexType, 2> points;
+  std::array<VertexType, 2> points{};
 
   for (std::size_t i = 1; i < n_normals; i++) {
     VertexType plane_dir(m_normals[i].y(), -m_normals[i].x());

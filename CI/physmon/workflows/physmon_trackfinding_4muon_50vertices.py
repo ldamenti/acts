@@ -105,16 +105,17 @@ with tempfile.TemporaryDirectory() as temp:
             impactMax=3 * u.mm,
         ),
         SeedFinderOptionsArg(bFieldInZ=2 * u.T, beamPos=(0.0, 0.0)),
-        seedingAlgorithm=SeedingAlgorithm.Default,
+        seedingAlgorithm=SeedingAlgorithm.GridTriplet,
         initialSigmas=[
             1 * u.mm,
             1 * u.mm,
             1 * u.degree,
             1 * u.degree,
-            0.1 * u.e / u.GeV,
+            0 * u.e / u.GeV,
             1 * u.ns,
         ],
-        initialSigmaPtRel=0.01,
+        initialSigmaQoverPt=0.1 * u.e / u.GeV,
+        initialSigmaPtRel=0.1,
         initialVarInflation=[1.0] * 6,
         geoSelectionConfigFile=setup.geoSel,
         outputDirRoot=tp,
@@ -160,7 +161,7 @@ with tempfile.TemporaryDirectory() as temp:
     )
 
     # Choosing a seeder only has an effect on VertexFinder.AMVF. For
-    # VertexFinder.IVF we always use acts.VertexSeedFinder.GaussianSeeder
+    # VertexFinder.IVF we always use acts.examples.VertexSeedFinder.GaussianSeeder
     # (Python binding is not implemented).
     # Setting useTime also only has an effect on VertexFinder.AMVF due to
     # the same reason.
@@ -169,7 +170,9 @@ with tempfile.TemporaryDirectory() as temp:
         setup.field,
         trackParameters="trackParameters",
         outputProtoVertices="ivf_notime_protovertices",
-        outputVertices="ivf_notime_fittedVertices",
+        outputVertices="ivf_notime_vertices",
+        outputVertexTruthMatching="ivf_notime_vertex_truth_matching",
+        outputTruthVertexMatching="ivf_notime_truth_vertex_matching",
         vertexFinder=VertexFinder.Iterative,
         outputDirRoot=tp / "ivf_notime",
         writeTrackInfo=True,
@@ -180,8 +183,10 @@ with tempfile.TemporaryDirectory() as temp:
         setup.field,
         trackParameters="trackParameters",
         outputProtoVertices="amvf_gauss_notime_protovertices",
-        outputVertices="amvf_gauss_notime_fittedVertices",
-        seeder=acts.VertexSeedFinder.GaussianSeeder,
+        outputVertices="amvf_gauss_notime_vertices",
+        outputVertexTruthMatching="amvf_gauss_notime_vertex_truth_matching",
+        outputTruthVertexMatching="amvf_gauss_notime_truth_vertex_matching",
+        seeder=acts.examples.VertexSeedFinder.GaussianSeeder,
         useTime=False,  # Time seeding not implemented for the Gaussian seeder
         vertexFinder=VertexFinder.AMVF,
         outputDirRoot=tp / "amvf_gauss_notime",
@@ -193,8 +198,10 @@ with tempfile.TemporaryDirectory() as temp:
         setup.field,
         trackParameters="trackParameters",
         outputProtoVertices="amvf_grid_time_protovertices",
-        outputVertices="amvf_grid_time_fittedVertices",
-        seeder=acts.VertexSeedFinder.AdaptiveGridSeeder,
+        outputVertices="amvf_grid_time_vertices",
+        outputVertexTruthMatching="amvf_grid_time_vertex_truth_matching",
+        outputTruthVertexMatching="amvf_grid_time_truth_vertex_matching",
+        seeder=acts.examples.VertexSeedFinder.AdaptiveGridSeeder,
         useTime=True,
         vertexFinder=VertexFinder.AMVF,
         outputDirRoot=tp / "amvf_grid_time",

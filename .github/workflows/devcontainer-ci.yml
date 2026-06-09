@@ -1,0 +1,39 @@
+name: Devcontainer CI
+
+on:
+  push:
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
+      - 'develop/**'
+
+permissions:
+  contents: read
+
+jobs:
+  devcontainer-build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        submodules: recursive
+        persist-credentials: false
+
+    - name: Install devcontainer CLI
+      run: |
+        npm install -g @devcontainers/cli
+
+    - name: Build devcontainer
+      run: |
+        devcontainer up --workspace-folder .
+
+    - name: Run configure_acts
+      run: |
+        devcontainer exec --workspace-folder . bash -c "configure_acts"
+
+    - name: Run build_acts with ActsCore target
+      run: |
+        devcontainer exec --workspace-folder . bash -c "build_acts --target ActsCore"

@@ -6,7 +6,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#include "Acts/Plugins/Json/MaterialMapJsonConverter.hpp"
+#include "ActsPlugins/Json/MaterialMapJsonConverter.hpp"
 
 #include "Acts/Definitions/Tolerance.hpp"
 #include "Acts/Geometry/ApproachDescriptor.hpp"
@@ -24,29 +24,26 @@
 #include "Acts/Material/IVolumeMaterial.hpp"
 #include "Acts/Material/ProtoSurfaceMaterial.hpp"
 #include "Acts/Material/ProtoVolumeMaterial.hpp"
-#include "Acts/Plugins/Json/ITrackingGeometryJsonDecorator.hpp"
-#include "Acts/Plugins/Json/IVolumeMaterialJsonDecorator.hpp"
-#include "Acts/Plugins/Json/MaterialJsonConverter.hpp"
-#include "Acts/Plugins/Json/SurfaceJsonConverter.hpp"
-#include "Acts/Plugins/Json/VolumeJsonConverter.hpp"
+#include "Acts/Surfaces/AnnulusBounds.hpp"
+#include "Acts/Surfaces/CylinderBounds.hpp"
+#include "Acts/Surfaces/RadialBounds.hpp"
 #include "Acts/Surfaces/RectangleBounds.hpp"
 #include "Acts/Surfaces/Surface.hpp"
 #include "Acts/Surfaces/SurfaceArray.hpp"
+#include "Acts/Surfaces/SurfaceBounds.hpp"
+#include "Acts/Surfaces/TrapezoidBounds.hpp"
 #include "Acts/Utilities/BinUtility.hpp"
-#include "Acts/Utilities/BinnedArray.hpp"
 #include "Acts/Utilities/BinningType.hpp"
-#include <Acts/Surfaces/AnnulusBounds.hpp>
-#include <Acts/Surfaces/CylinderBounds.hpp>
-#include <Acts/Surfaces/RadialBounds.hpp>
-#include <Acts/Surfaces/SurfaceBounds.hpp>
-#include <Acts/Surfaces/TrapezoidBounds.hpp>
+#include "ActsPlugins/Json/ITrackingGeometryJsonDecorator.hpp"
+#include "ActsPlugins/Json/IVolumeMaterialJsonDecorator.hpp"
+#include "ActsPlugins/Json/MaterialJsonConverter.hpp"
+#include "ActsPlugins/Json/SurfaceJsonConverter.hpp"
+#include "ActsPlugins/Json/VolumeJsonConverter.hpp"
 
 #include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <map>
 #include <numbers>
-#include <stdexcept>
 
 namespace Acts {
 // specialisations of decoration helper function
@@ -249,9 +246,9 @@ Acts::MaterialMapJsonConverter::MaterialMapJsonConverter(
 /// Convert method
 ///
 nlohmann::json Acts::MaterialMapJsonConverter::materialMapsToJson(
-    const DetectorMaterialMaps& maps,
+    const TrackingGeometryMaterial& maps,
     const IVolumeMaterialJsonDecorator* decorator) {
-  VolumeMaterialMap volumeMap = maps.second;
+  VolumeMaterialMaps volumeMap = maps.second;
   std::vector<std::pair<GeometryIdentifier, const IVolumeMaterial*>>
       mapVolumeInit;
   for (const auto& [key, value] : volumeMap) {
@@ -261,7 +258,7 @@ nlohmann::json Acts::MaterialMapJsonConverter::materialMapsToJson(
       mapVolumeInit);
   nlohmann::json materialVolume =
       m_volumeMaterialConverter.toJson(hierarchyVolumeMap, decorator);
-  SurfaceMaterialMap surfaceMap = maps.first;
+  SurfaceMaterialMaps surfaceMap = maps.first;
   std::vector<std::pair<GeometryIdentifier, const ISurfaceMaterial*>>
       mapSurfaceInit;
   for (const auto& [key, value] : surfaceMap) {
@@ -277,13 +274,13 @@ nlohmann::json Acts::MaterialMapJsonConverter::materialMapsToJson(
   return materialMap;
 }
 
-Acts::MaterialMapJsonConverter::DetectorMaterialMaps
+Acts::TrackingGeometryMaterial
 Acts::MaterialMapJsonConverter::jsonToMaterialMaps(
     const nlohmann::json& materialmap) {
   nlohmann::json materialVolume = materialmap["Volumes"];
   GeometryHierarchyMap<const IVolumeMaterial*> hierarchyVolumeMap =
       m_volumeMaterialConverter.fromJson(materialVolume);
-  VolumeMaterialMap volumeMap;
+  VolumeMaterialMaps volumeMap;
   for (std::size_t i = 0; i < hierarchyVolumeMap.size(); i++) {
     std::shared_ptr<const IVolumeMaterial> volumePointer(
         hierarchyVolumeMap.valueAt(i));
@@ -292,15 +289,14 @@ Acts::MaterialMapJsonConverter::jsonToMaterialMaps(
   nlohmann::json materialSurface = materialmap["Surfaces"];
   GeometryHierarchyMap<const ISurfaceMaterial*> hierarchySurfaceMap =
       m_surfaceMaterialConverter.fromJson(materialSurface);
-  SurfaceMaterialMap surfaceMap;
+  SurfaceMaterialMaps surfaceMap;
   for (std::size_t i = 0; i < hierarchySurfaceMap.size(); i++) {
     std::shared_ptr<const ISurfaceMaterial> surfacePointer(
         hierarchySurfaceMap.valueAt(i));
     surfaceMap.insert({hierarchySurfaceMap.idAt(i), std::move(surfacePointer)});
   }
 
-  Acts::MaterialMapJsonConverter::DetectorMaterialMaps maps = {surfaceMap,
-                                                               volumeMap};
+  Acts::TrackingGeometryMaterial maps = {surfaceMap, volumeMap};
 
   // Return the filled maps
   return maps;
@@ -344,8 +340,7 @@ void Acts::MaterialMapJsonConverter::convertToHierarchy(
     // this volume was already visited
     return;
   }
-  if ((tVolume->volumeMaterial() != nullptr ||
-       m_cfg.processNonMaterial == true) &&
+  if ((tVolume->hasMaterial() || m_cfg.processNonMaterial == true) &&
       m_cfg.processVolumes == true) {
     volumeHierarchy.push_back(
         {tVolume->geometryId(), defaultVolumeMaterial(tVolume)});
@@ -375,8 +370,7 @@ void Acts::MaterialMapJsonConverter::convertToHierarchy(
     for (auto& lay : layers) {
       if (m_cfg.processRepresenting == true) {
         auto& layRep = lay->surfaceRepresentation();
-        if ((layRep.surfaceMaterial() != nullptr ||
-             m_cfg.processNonMaterial == true) &&
+        if ((layRep.hasMaterial() || m_cfg.processNonMaterial == true) &&
             layRep.geometryId() != GeometryIdentifier()) {
           surfaceHierarchy.push_back(
               {layRep.geometryId(),
@@ -386,8 +380,7 @@ void Acts::MaterialMapJsonConverter::convertToHierarchy(
       if (lay->approachDescriptor() != nullptr &&
           m_cfg.processApproaches == true) {
         for (auto& asf : lay->approachDescriptor()->containedSurfaces()) {
-          if (asf->surfaceMaterial() != nullptr ||
-              m_cfg.processNonMaterial == true) {
+          if (asf->hasMaterial() || m_cfg.processNonMaterial == true) {
             surfaceHierarchy.push_back(
                 {asf->geometryId(),
                  defaultSurfaceMaterial(asf->getSharedPtr(), m_cfg.context)});
@@ -396,8 +389,7 @@ void Acts::MaterialMapJsonConverter::convertToHierarchy(
       }
       if (lay->surfaceArray() != nullptr && m_cfg.processSensitives == true) {
         for (auto& ssf : lay->surfaceArray()->surfaces()) {
-          if (ssf->surfaceMaterial() != nullptr ||
-              m_cfg.processNonMaterial == true) {
+          if (ssf->hasMaterial() || m_cfg.processNonMaterial == true) {
             auto sp = ssf->getSharedPtr();
             auto sm = defaultSurfaceMaterial(sp, m_cfg.context);
             auto id = ssf->geometryId();
@@ -415,8 +407,7 @@ void Acts::MaterialMapJsonConverter::convertToHierarchy(
     auto& bssfRep = bsurf->surfaceRepresentation();
     if (bssfRep.geometryId().volume() == tVolume->geometryId().volume() &&
         m_cfg.processBoundaries == true) {
-      if (bssfRep.surfaceMaterial() != nullptr ||
-          m_cfg.processNonMaterial == true) {
+      if (bssfRep.hasMaterial() || m_cfg.processNonMaterial == true) {
         surfaceHierarchy.push_back(
             {bssfRep.geometryId(),
              defaultSurfaceMaterial(bssfRep.getSharedPtr(), m_cfg.context)});

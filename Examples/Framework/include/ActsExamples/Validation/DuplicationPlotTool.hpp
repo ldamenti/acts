@@ -8,50 +8,38 @@
 
 #pragma once
 
-#include "Acts/EventData/TrackParameters.hpp"
+#include "Acts/Utilities/Histogram.hpp"
 #include "Acts/Utilities/Logger.hpp"
 #include "ActsExamples/EventData/SimParticle.hpp"
-#include "ActsExamples/Utilities/Helpers.hpp"
 
 #include <cstddef>
 #include <map>
 #include <memory>
 #include <string>
 
-class TEfficiency;
-class TProfile;
-namespace ActsFatras {
-class Particle;
-}  // namespace ActsFatras
-
 namespace ActsExamples {
 
-// Tools to make duplication rate and duplication number plots to show tracking
-// duplication.
-//
-// The duplication is investigated for those truth-matched reco tracks. If there
-// are a few reco tracks matched to the same truth particle, the reco track with
-// the highest matching probability is tagges as 'real' and the others are
-// 'duplicated'.
+/// Tools to make duplication ratio (formerly called duplication rate) and
+/// duplication number plots to show tracking duplication.
+///
+/// The duplication ratio is evaluated on truth-matched reco tracks. If there
+/// is more than one track matched to the same truth particle, the reco track
+/// with the highest matching probability is tagged as 'real' and the others are
+/// 'duplicated'.
 class DuplicationPlotTool {
  public:
+  using AxisVariant = Acts::Experimental::AxisVariant;
+  using BoostRegularAxis = Acts::Experimental::BoostRegularAxis;
+  using Efficiency1 = Acts::Experimental::Efficiency1;
+  using ProfileHistogram1 = Acts::Experimental::ProfileHistogram1;
+
   /// @brief The nested configuration struct
   struct Config {
-    std::map<std::string, PlotHelpers::Binning> varBinning = {
-        {"Eta", PlotHelpers::Binning("#eta", 40, -4, 4)},
-        {"Phi", PlotHelpers::Binning("#phi", 100, -3.15, 3.15)},
-        {"Pt", PlotHelpers::Binning("pT [GeV/c]", 40, 0, 100)},
-        {"Num", PlotHelpers::Binning("N", 30, -0.5, 29.5)}};
-  };
-
-  /// @brief Nested Cache struct
-  struct DuplicationPlotCache {
-    TProfile* nDuplicated_vs_pT;         ///< Number of duplicated tracks vs pT
-    TProfile* nDuplicated_vs_eta;        ///< Number of duplicated tracks vs eta
-    TProfile* nDuplicated_vs_phi;        ///< Number of duplicated tracks vs phi
-    TEfficiency* duplicationRate_vs_pT;  ///< Tracking duplication rate vs pT
-    TEfficiency* duplicationRate_vs_eta;  ///< Tracking duplication rate vs eta
-    TEfficiency* duplicationRate_vs_phi;  ///< Tracking duplication rate vs phi
+    std::map<std::string, AxisVariant> varBinning = {
+        {"Eta", BoostRegularAxis(40, -4, 4, "#eta")},
+        {"Phi", BoostRegularAxis(100, -3.15, 3.15, "#phi")},
+        {"Pt", BoostRegularAxis(40, 0, 100, "pT [GeV/c]")},
+        {"Num", BoostRegularAxis(30, -0.5, 29.5, "N")}};
   };
 
   /// Constructor
@@ -60,45 +48,34 @@ class DuplicationPlotTool {
   /// @param lvl Message level declaration
   DuplicationPlotTool(const Config& cfg, Acts::Logging::Level lvl);
 
-  /// @brief book the duplication plots
+  /// @brief fill duplication ratio w.r.t. fitted track parameters
   ///
-  /// @param duplicationPlotCache the cache for duplication plots
-  void book(DuplicationPlotCache& duplicationPlotCache) const;
-
-  /// @brief fill duplication rate w.r.t. fitted track parameters
-  ///
-  /// @param duplicationPlotCache cache object for duplication plots
   /// @param fittedParameters fitted track parameters of this track
   /// @param status the (truth-matched) reconstructed track is duplicated or not
-  void fill(DuplicationPlotCache& duplicationPlotCache,
-            const Acts::BoundTrackParameters& fittedParameters,
-            bool status) const;
+  void fill(const Acts::BoundTrackParameters& fittedParameters, bool status);
 
   /// @brief fill number of duplicated tracks for a truth particle seed
   ///
-  /// @param duplicationPlotCache cache object for duplication plots
   /// @param truthParticle the truth Particle
-  /// @param nDuplicatedTracks the number of duplicated tracks
-  void fill(DuplicationPlotCache& duplicationPlotCache,
-            const SimParticleState& truthParticle,
-            std::size_t nDuplicatedTracks) const;
+  /// @param nDuplicatedTracks the number of matched tracks
+  void fill(const SimParticleState& truthParticle, std::size_t nMatchedTracks);
 
-  /// @brief write the duplication plots to file
-  ///
-  /// @param duplicationPlotCache cache object for duplication plots
-  void write(const DuplicationPlotCache& duplicationPlotCache) const;
-
-  /// @brief delete the duplication plots
-  ///
-  /// @param duplicationPlotCache cache object for duplication plots
-  void clear(DuplicationPlotCache& duplicationPlotCache) const;
+  /// @brief Accessors for histogram maps (const reference)
+  const std::map<std::string, ProfileHistogram1>& profiles() const {
+    return m_profiles;
+  }
+  const std::map<std::string, Efficiency1>& efficiencies() const {
+    return m_efficiencies;
+  }
 
  private:
-  Config m_cfg;                                  ///< The Config class
-  std::unique_ptr<const Acts::Logger> m_logger;  ///< The logging instance
-
-  /// The logger
   const Acts::Logger& logger() const { return *m_logger; }
+
+  Config m_cfg;
+  std::unique_ptr<const Acts::Logger> m_logger;
+
+  std::map<std::string, ProfileHistogram1> m_profiles;
+  std::map<std::string, Efficiency1> m_efficiencies;
 };
 
 }  // namespace ActsExamples

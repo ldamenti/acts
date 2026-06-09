@@ -8,16 +8,10 @@
 
 #include "ActsExamples/Generators/Pythia8ProcessGenerator.hpp"
 
-#include "Acts/Utilities/MathHelpers.hpp"
-#include "ActsExamples/EventData/SimVertex.hpp"
-#include "ActsFatras/EventData/Barcode.hpp"
-#include "ActsFatras/EventData/Particle.hpp"
+#include "ActsPlugins/FpeMonitoring/FpeMonitor.hpp"
 
-#include <algorithm>
-#include <iterator>
 #include <ostream>
 #include <random>
-#include <utility>
 
 #include <HepMC3/WriterAscii.h>
 #include <Pythia8/Pythia.h>
@@ -107,13 +101,13 @@ Pythia8Generator::~Pythia8Generator() {
     m_impl->m_hepMC3Writer->close();
   }
 
-  ACTS_INFO("Pythia8Generator produced "
-            << m_impl->m_pythia8RndmEngine->statistics.numUniformRandomNumbers
-            << " uniform random numbers");
-  ACTS_INFO("                 first = "
-            << m_impl->m_pythia8RndmEngine->statistics.first);
-  ACTS_INFO("                  last = "
-            << m_impl->m_pythia8RndmEngine->statistics.last);
+  ACTS_DEBUG("Pythia8Generator produced "
+             << m_impl->m_pythia8RndmEngine->statistics.numUniformRandomNumbers
+             << " uniform random numbers");
+  ACTS_DEBUG("                 first = "
+             << m_impl->m_pythia8RndmEngine->statistics.first);
+  ACTS_DEBUG("                  last = "
+             << m_impl->m_pythia8RndmEngine->statistics.last);
 }
 
 std::shared_ptr<HepMC3::GenEvent> Pythia8Generator::operator()(
@@ -127,7 +121,7 @@ std::shared_ptr<HepMC3::GenEvent> Pythia8Generator::operator()(
   m_impl->m_pythia8RndmEngine->setRandomEngine(rng);
 
   {
-    Acts::FpeMonitor mon{0};  // disable all FPEs while we're in Pythia8
+    ActsPlugins::FpeMonitor mon{0};  // disable all FPEs while we're in Pythia8
     m_pythia8->next();
   }
 

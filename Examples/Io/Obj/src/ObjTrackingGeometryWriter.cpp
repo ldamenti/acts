@@ -8,42 +8,56 @@
 
 #include "ActsExamples/Io/Obj/ObjTrackingGeometryWriter.hpp"
 
+#include "Acts/Geometry/TrackingGeometry.hpp"
 #include "Acts/Utilities/Logger.hpp"
+#include "Acts/Visualization/GeometryView3D.hpp"
+#include "Acts/Visualization/ObjVisualization3D.hpp"
 #include "ActsExamples/Framework/AlgorithmContext.hpp"
-#include <Acts/Geometry/TrackingGeometry.hpp>
-#include <Acts/Visualization/GeometryView3D.hpp>
-#include <Acts/Visualization/ObjVisualization3D.hpp>
 
 #include <filesystem>
 
-ActsExamples::ObjTrackingGeometryWriter::ObjTrackingGeometryWriter(
-    const ActsExamples::ObjTrackingGeometryWriter::Config& config,
-    Acts::Logging::Level level)
+namespace ActsExamples {
+
+ObjTrackingGeometryWriter::ObjTrackingGeometryWriter(
+    const ObjTrackingGeometryWriter::Config& config, Acts::Logging::Level level)
     : m_logger{Acts::getDefaultLogger(name(), level)}, m_cfg(config) {}
 
-std::string ActsExamples::ObjTrackingGeometryWriter::name() const {
+std::string ObjTrackingGeometryWriter::name() const {
   return "ObjTrackingGeometryWriter";
 }
 
-ActsExamples::ProcessCode ActsExamples::ObjTrackingGeometryWriter::write(
+ProcessCode ObjTrackingGeometryWriter::write(
     const AlgorithmContext& context, const Acts::TrackingGeometry& tGeometry) {
   ACTS_DEBUG(">>Obj: Writer for TrackingGeometry object called.");
 
   auto world = tGeometry.highestTrackingVolume();
   if (world != nullptr) {
-    write(context, *world);
+    write(context, *world,
+          tGeometry.geometryVersion() ==
+              Acts::TrackingGeometry::GeometryVersion::Gen3);
   }
-  return ActsExamples::ProcessCode::SUCCESS;
+  return ProcessCode::SUCCESS;
 }
 
-void ActsExamples::ObjTrackingGeometryWriter::write(
-    const AlgorithmContext& context, const Acts::TrackingVolume& tVolume) {
+void ObjTrackingGeometryWriter::write(const AlgorithmContext& context,
+                                      const Acts::TrackingVolume& tVolume,
+                                      bool gen3) {
   ACTS_DEBUG(">>Obj: Writer for TrackingVolume object called.");
 
   Acts::ObjVisualization3D objVis(m_cfg.outputPrecision, m_cfg.outputScalor);
 
-  Acts::GeometryView3D::drawTrackingVolume(
-      objVis, tVolume, context.geoContext, m_cfg.containerView,
-      m_cfg.volumeView, m_cfg.passiveView, m_cfg.sensitiveView, m_cfg.gridView,
-      true, "", std::filesystem::path(m_cfg.outputDir));
+  if (gen3) {
+    ACTS_VERBOSE(">>Obj: Gen3 geometry detected, using Gen3 visualization");
+    tVolume.visualize(objVis, context.geoContext, m_cfg.volumeView,
+                      m_cfg.portalView, m_cfg.sensitiveView);
+    objVis.write(m_cfg.outputDir / "geometry");
+  } else {
+    ACTS_VERBOSE(">>Obj: Gen1 geometry detected, using Gen1 visualization");
+    Acts::GeometryView3D::drawTrackingVolume(
+        objVis, tVolume, context.geoContext, m_cfg.containerView,
+        m_cfg.volumeView, m_cfg.passiveView, m_cfg.sensitiveView,
+        m_cfg.gridView, true, "", std::filesystem::path(m_cfg.outputDir));
+  }
 }
+
+}  // namespace ActsExamples

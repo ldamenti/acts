@@ -10,13 +10,13 @@
 
 #include "Acts/Definitions/Algebra.hpp"
 #include "Acts/Geometry/ApproachDescriptor.hpp"
-#include "Acts/Geometry/DetectorElementBase.hpp"
 #include "Acts/Geometry/GeometryContext.hpp"
 #include "Acts/Geometry/ProtoLayer.hpp"
 #include "Acts/Material/ISurfaceMaterial.hpp"
 #include "Acts/Surfaces/PlanarBounds.hpp"
 #include "Acts/Surfaces/PlaneSurface.hpp"
 #include "Acts/Surfaces/RectangleBounds.hpp"
+#include "Acts/Surfaces/SurfacePlacementBase.hpp"
 #include "Acts/Surfaces/TrapezoidBounds.hpp"
 #include "Acts/Utilities/Logger.hpp"
 #include "ActsExamples/GenericDetector/GenericDetectorElement.hpp"
@@ -32,8 +32,8 @@ class DetecorElementBase;
 namespace ActsExamples::Generic {
 
 struct ProtoLayerSurfaces {
-  Acts::ProtoLayer protoLayer;
-  std::vector<std::shared_ptr<const Acts::Surface>> surfaces;
+  Acts::MutableProtoLayer protoLayer;
+  std::vector<std::shared_ptr<Acts::Surface>> surfaces;
   std::size_t bins0;
   std::size_t bins1;
 };
@@ -47,9 +47,8 @@ class ProtoLayerCreator {
  public:
   using DetectorElementFactory =
       std::function<std::shared_ptr<GenericDetectorElement>(
-          std::shared_ptr<const Acts::Transform3>,
-          std::shared_ptr<const Acts::PlanarBounds>, double,
-          std::shared_ptr<const Acts::ISurfaceMaterial>)>;
+          const Acts::Transform3&, std::shared_ptr<const Acts::PlanarBounds>,
+          double, std::shared_ptr<const Acts::ISurfaceMaterial>)>;
 
   /// @struct Config
   ///
@@ -150,6 +149,10 @@ class ProtoLayerCreator {
   /// @return the protolayers and surfaces on the  positive detector side
   std::vector<ProtoLayerSurfaces> positiveProtoLayers(
       const Acts::GeometryContext& gctx) const;
+
+  /// @brief get the configuration
+  /// @return the configuration
+  const Config& config() const { return m_cfg; }
 
  private:
   /// @brief private helper method to create the proto layers on the

@@ -10,7 +10,9 @@
 
 #include "Acts/Clusterization/TimedClusterization.hpp"
 
-namespace Acts::Test {
+#include <algorithm>
+
+using namespace Acts;
 
 // Define objects
 using Identifier = std::size_t;
@@ -29,8 +31,8 @@ struct Cluster {
   std::vector<Identifier> ids{};
 };
 
-using CellCollection = std::vector<Acts::Test::Cell>;
-using ClusterCollection = std::vector<Acts::Test::Cluster>;
+using CellCollection = std::vector<Cell>;
+using ClusterCollection = std::vector<Cluster>;
 
 // Define functions
 static inline int getCellRow(const Cell& cell) {
@@ -41,10 +43,6 @@ static inline int getCellColumn(const Cell& cell) {
   return cell.column;
 }
 
-static inline int& getCellLabel(Cell& cell) {
-  return cell.label;
-}
-
 static inline double getCellTime(const Cell& cell) {
   return cell.time;
 }
@@ -52,6 +50,8 @@ static inline double getCellTime(const Cell& cell) {
 static void clusterAddCell(Cluster& cl, const Cell& cell) {
   cl.ids.push_back(cell.id);
 }
+
+BOOST_AUTO_TEST_SUITE(ClusterizationSuite)
 
 BOOST_AUTO_TEST_CASE(TimedGrid_1D_withtime) {
   // 1x10 matrix
@@ -80,22 +80,61 @@ BOOST_AUTO_TEST_CASE(TimedGrid_1D_withtime) {
   expectedResults.push_back({7ul, 8ul});
   expectedResults.push_back({4ul, 5ul});
 
-  ClusterCollection clusters =
-      Acts::Ccl::createClusters<CellCollection, ClusterCollection, 1>(
-          cells, Acts::Ccl::TimedConnect<Cell, 1>(0.5));
+  Acts::Ccl::ClusteringData data;
+  ClusterCollection clusters;
+  Acts::Ccl::createClusters<CellCollection, ClusterCollection, 1>(
+      data, cells, clusters, Acts::Ccl::TimedConnect<Cell, 1>(0.5));
 
   BOOST_CHECK_EQUAL(5ul, clusters.size());
 
   for (std::size_t i(0); i < clusters.size(); ++i) {
     std::vector<Identifier>& timedIds = clusters[i].ids;
     const std::vector<Identifier>& expected = expectedResults[i];
-    std::sort(timedIds.begin(), timedIds.end());
+    std::ranges::sort(timedIds);
     BOOST_CHECK_EQUAL(timedIds.size(), expected.size());
 
     for (std::size_t j(0); j < timedIds.size(); ++j) {
       BOOST_CHECK_EQUAL(timedIds[j], expected[j]);
     }
   }
+}
+
+BOOST_AUTO_TEST_CASE(TimedGrid_1D_duplicate_cells) {
+  // Cells with same position but time difference larger than tolerance should
+  // not be considered duplicates
+  CellCollection cells = {Cell(0ul, 0, 0, 0.0), Cell(1ul, 0, 0, 1.0)};
+  ClusterCollection clusters;
+  Ccl::ClusteringData data;
+
+  Ccl::createClusters<CellCollection, ClusterCollection, 1>(
+      data, cells, clusters, Ccl::TimedConnect<Cell, 1>(0.5));
+  BOOST_CHECK_EQUAL(2ul, clusters.size());
+
+  // Cells with same position and time difference within tolerance should be
+  // considered duplicates
+  cells = {Cell(0ul, 0, 0, 0.0), Cell(1ul, 0, 0, 0.4)};
+  clusters.clear();
+  data.clear();
+
+  BOOST_CHECK_THROW(
+      (Ccl::createClusters<CellCollection, ClusterCollection, 1>(
+          data, cells, clusters, Ccl::TimedConnect<Cell, 1>(0.5))),
+      std::invalid_argument);
+}
+
+BOOST_AUTO_TEST_CASE(TimedGrid_1D_space_and_time) {
+  // Cells with the same position but large time differences are not duplicates.
+  // However, they can still be clustered through a neighboring cell if it is
+  // within the time tolerance for both.
+  CellCollection cells = {Cell(0ul, 0, 0, 0.0), Cell(1ul, 1, 0, 0.4),
+                          Cell(2ul, 0, 0, 0.8)};
+  ClusterCollection clusters;
+  Ccl::ClusteringData data;
+
+  Ccl::createClusters<CellCollection, ClusterCollection, 1>(
+      data, cells, clusters, Ccl::TimedConnect<Cell, 1>(0.5));
+  BOOST_CHECK_EQUAL(1ul, clusters.size());
+  BOOST_CHECK_EQUAL(clusters[0].ids.size(), 3ul);
 }
 
 BOOST_AUTO_TEST_CASE(TimedGrid_2D_notime) {
@@ -123,17 +162,19 @@ BOOST_AUTO_TEST_CASE(TimedGrid_2D_notime) {
   expectedResults.push_back({1ul, 2ul});
   expectedResults.push_back({6ul});
 
-  ClusterCollection clusters =
-      Acts::Ccl::createClusters<CellCollection, ClusterCollection, 2>(
-          cells,
-          Acts::Ccl::TimedConnect<Cell, 2>(std::numeric_limits<double>::max()));
+  Acts::Ccl::ClusteringData data;
+  ClusterCollection clusters;
+  Acts::Ccl::createClusters<CellCollection, ClusterCollection, 2>(
+      data, cells, clusters,
+      Acts::Ccl::TimedConnect<Cell, 2>(std::numeric_limits<double>::max()));
 
   BOOST_CHECK_EQUAL(4ul, clusters.size());
 
   // Compare against default connect (only space)
-  ClusterCollection defaultClusters =
-      Acts::Ccl::createClusters<CellCollection, ClusterCollection, 2>(
-          cells, Acts::Ccl::DefaultConnect<Cell, 2>());
+  data.clear();
+  ClusterCollection defaultClusters;
+  Acts::Ccl::createClusters<CellCollection, ClusterCollection, 2>(
+      data, cells, defaultClusters, Acts::Ccl::DefaultConnect<Cell, 2>());
 
   BOOST_CHECK_EQUAL(4ul, defaultClusters.size());
   BOOST_CHECK_EQUAL(defaultClusters.size(), expectedResults.size());
@@ -147,8 +188,8 @@ BOOST_AUTO_TEST_CASE(TimedGrid_2D_notime) {
     BOOST_CHECK_EQUAL(timedIds.size(), sizes[i]);
     BOOST_CHECK_EQUAL(timedIds.size(), expected.size());
 
-    std::sort(timedIds.begin(), timedIds.end());
-    std::sort(defaultIds.begin(), defaultIds.end());
+    std::ranges::sort(timedIds);
+    std::ranges::sort(defaultIds);
     for (std::size_t j(0); j < timedIds.size(); ++j) {
       BOOST_CHECK_EQUAL(timedIds[j], defaultIds[j]);
       BOOST_CHECK_EQUAL(timedIds[j], expected[j]);
@@ -191,9 +232,10 @@ BOOST_AUTO_TEST_CASE(TimedGrid_2D_withtime) {
   expectedResults.push_back({1ul, 2ul});
   expectedResults.push_back({6ul});
 
-  ClusterCollection clusters =
-      Acts::Ccl::createClusters<CellCollection, ClusterCollection, 2>(
-          cells, Acts::Ccl::TimedConnect<Cell, 2>(0.5));
+  Acts::Ccl::ClusteringData data;
+  ClusterCollection clusters;
+  Acts::Ccl::createClusters<CellCollection, ClusterCollection, 2>(
+      data, cells, clusters, Acts::Ccl::TimedConnect<Cell, 2>(0.5));
 
   BOOST_CHECK_EQUAL(6ul, clusters.size());
 
@@ -201,7 +243,7 @@ BOOST_AUTO_TEST_CASE(TimedGrid_2D_withtime) {
   for (std::size_t i(0); i < clusters.size(); ++i) {
     std::vector<Identifier>& timedIds = clusters[i].ids;
     BOOST_CHECK_EQUAL(timedIds.size(), sizes[i]);
-    std::sort(timedIds.begin(), timedIds.end());
+    std::ranges::sort(timedIds);
 
     const std::vector<Identifier>& expected = expectedResults[i];
     BOOST_CHECK_EQUAL(timedIds.size(), expected.size());
@@ -241,9 +283,10 @@ BOOST_AUTO_TEST_CASE(TimedGrid_2D_noTollerance) {
   expectedResults.push_back({2ul});
   expectedResults.push_back({6ul});
 
-  ClusterCollection clusters =
-      Acts::Ccl::createClusters<CellCollection, ClusterCollection, 2>(
-          cells, Acts::Ccl::TimedConnect<Cell, 2>(0.));
+  Acts::Ccl::ClusteringData data;
+  ClusterCollection clusters;
+  Acts::Ccl::createClusters<CellCollection, ClusterCollection, 2>(
+      data, cells, clusters, Acts::Ccl::TimedConnect<Cell, 2>(0.));
 
   BOOST_CHECK_EQUAL(7ul, clusters.size());
 
@@ -257,4 +300,72 @@ BOOST_AUTO_TEST_CASE(TimedGrid_2D_noTollerance) {
   }
 }
 
-}  // namespace Acts::Test
+BOOST_AUTO_TEST_CASE(TimedGrid_2D_duplicate_cells) {
+  // Cells with same position but time difference larger than tolerance should
+  // not be considered duplicates
+  CellCollection cells = {Cell(0ul, 0, 0, 0.0), Cell(1ul, 0, 0, 1.0)};
+  ClusterCollection clusters;
+  Ccl::ClusteringData data;
+
+  Ccl::createClusters<CellCollection, ClusterCollection, 2>(
+      data, cells, clusters, Ccl::TimedConnect<Cell, 2>(0.5));
+  BOOST_CHECK_EQUAL(2ul, clusters.size());
+
+  // Cells with same position and time difference within tolerance should be
+  // considered duplicates
+  cells = {Cell(0ul, 0, 0, 0.0), Cell(1ul, 0, 0, 0.4)};
+  clusters.clear();
+  data.clear();
+
+  BOOST_CHECK_THROW(
+      (Ccl::createClusters<CellCollection, ClusterCollection, 2>(
+          data, cells, clusters, Ccl::TimedConnect<Cell, 2>(0.5))),
+      std::invalid_argument);
+}
+
+BOOST_AUTO_TEST_CASE(TimedGrid_2D_space_and_time_conn4) {
+  // Cells with the same position but large time differences are not duplicates.
+  // However, they can still be clustered through a neighboring cell if it is
+  // within the time tolerance for both:
+  // 3x3 matrix
+  /*
+    O  X/Z  O
+   X/Z  Y  X/Z
+    O  X/Z  O
+  */
+  CellCollection cells = {
+      Cell(0ul, 1, 0, 0.0), Cell(1ul, 0, 1, 0.0), Cell(2ul, 2, 1, 0.0),
+      Cell(3ul, 1, 2, 0.0), Cell(4ul, 1, 0, 0.8), Cell(5ul, 0, 1, 0.8),
+      Cell(6ul, 2, 1, 0.8), Cell(7ul, 1, 2, 0.8), Cell(8ul, 1, 1, 0.4)};
+  ClusterCollection clusters;
+  Ccl::ClusteringData data;
+
+  Ccl::createClusters<CellCollection, ClusterCollection, 2>(
+      data, cells, clusters, Ccl::TimedConnect<Cell, 2>(0.5, false));
+  BOOST_CHECK_EQUAL(1ul, clusters.size());
+  BOOST_CHECK_EQUAL(clusters[0].ids.size(), 9ul);
+}
+
+BOOST_AUTO_TEST_CASE(TimedGrid_2D_space_and_time_conn8) {
+  // Cells with the same position but large time differences are not duplicates.
+  // However, they can still be clustered through a neighboring cell if it is
+  // within the time tolerance for both:
+  // 3x3 matrix
+  /*
+    Z   X   O
+    X   Y   O
+   X/Z  O   O
+  */
+  CellCollection cells = {Cell(0ul, 0, 0, 0.0), Cell(1ul, 0, 2, 0.0),
+                          Cell(2ul, 1, 0, 0.8), Cell(3ul, 0, 1, 0.8),
+                          Cell(4ul, 0, 2, 0.8), Cell(5ul, 1, 1, 0.4)};
+  ClusterCollection clusters;
+  Ccl::ClusteringData data;
+
+  Ccl::createClusters<CellCollection, ClusterCollection, 2>(
+      data, cells, clusters, Ccl::TimedConnect<Cell, 2>(0.5, true));
+  BOOST_CHECK_EQUAL(1ul, clusters.size());
+  BOOST_CHECK_EQUAL(clusters[0].ids.size(), 6ul);
+}
+
+BOOST_AUTO_TEST_SUITE_END()

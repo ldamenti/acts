@@ -1,9 +1,9 @@
-add_library(
-    ActsExamplesTrackFitting
-    SHARED
+acts_add_library(
+    ExamplesTrackFitting
     src/RefittingCalibrator.cpp
     src/TrackFittingAlgorithm.cpp
     src/KalmanFitterFunction.cpp
+    src/KalmanReferenceTrajectoryFitterFunction.cpp
     src/RefittingAlgorithm.cpp
     src/GsfFitterFunction.cpp
     src/GlobalChiSquareFitterFunction.cpp
@@ -14,12 +14,7 @@ target_include_directories(
 )
 target_link_libraries(
     ActsExamplesTrackFitting
-    PUBLIC ActsCore ActsExamplesFramework ActsExamplesMagneticField
+    PUBLIC Acts::ExamplesFramework Acts::ExamplesMagneticField
 )
 
-acts_compile_headers(ActsExamplesTrackFitting GLOB "include/**/*.hpp")
-
-install(
-    TARGETS ActsExamplesTrackFitting
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-)
+acts_compile_headers(ExamplesTrackFitting GLOB "include/**/*.hpp")

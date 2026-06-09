@@ -97,7 +97,7 @@ def run_ckf_tracking(label, seeding):
             setup.trackingGeometry,
             setup.field,
             TrackSmearingSigmas(  # only used by SeedingAlgorithm.TruthSmeared
-                # zero eveything so the CKF has a chance to find the measurements
+                # zero everything so the CKF has a chance to find the measurements
                 loc0=0,
                 loc0PtA=0,
                 loc0PtB=0,
@@ -128,10 +128,11 @@ def run_ckf_tracking(label, seeding):
                 1 * u.mm,
                 1 * u.degree,
                 1 * u.degree,
-                0.1 * u.e / u.GeV,
+                0 * u.e / u.GeV,
                 1 * u.ns,
             ],
-            initialSigmaPtRel=0.01,
+            initialSigmaQoverPt=0.1 * u.e / u.GeV,
+            initialSigmaPtRel=0.1,
             initialVarInflation=[1.0] * 6,
             geoSelectionConfigFile=setup.geoSel,
             rnd=rnd,  # only used by SeedingAlgorithm.TruthSmeared
@@ -181,7 +182,7 @@ def run_ckf_tracking(label, seeding):
 for label, seeding in [
     ("truth_smeared", SeedingAlgorithm.TruthSmeared),
     ("truth_estimated", SeedingAlgorithm.TruthEstimated),
-    ("seeded", SeedingAlgorithm.Default),
-    ("orthogonal", SeedingAlgorithm.Orthogonal),
+    ("seeded", SeedingAlgorithm.GridTriplet),
+    ("orthogonal", SeedingAlgorithm.OrthogonalTriplet),
 ]:
     run_ckf_tracking(label, seeding)

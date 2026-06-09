@@ -24,7 +24,6 @@
 
 namespace ActsExamples {
 class RandomNumbers;
-struct AlgorithmContext;
 
 /// @brief Smear track parameters.
 ///
@@ -68,8 +67,13 @@ class TrackParameterSmearing final : public IAlgorithm {
     /// Optional. Initial sigmas for the track parameters which overwrites the
     /// smearing params if set.
     std::optional<std::array<double, 6>> initialSigmas;
-    /// Relative pt resolution used for the initial sigma of q/p.
-    double initialSigmaPtRel = 0.1;
+    /// Initial sigma(q/pt) for the track parameters.
+    /// @note The resulting q/p sigma is added to the one in `initialSigmas`
+    double initialSigmaQoverPt =
+        0 * Acts::UnitConstants::e / Acts::UnitConstants::GeV;
+    /// Initial sigma(pt)/pt for the track parameters.
+    /// @note The resulting q/p sigma is added to the one in `initialSigmas`
+    double initialSigmaPtRel = 0;
     /// Inflate the initial covariance matrix
     std::array<double, 6> initialVarInflation = {1e4, 1e4, 1e4, 1e4, 1e4, 1e4};
 
@@ -77,7 +81,9 @@ class TrackParameterSmearing final : public IAlgorithm {
     std::optional<Acts::ParticleHypothesis> particleHypothesis = std::nullopt;
   };
 
-  TrackParameterSmearing(const Config& config, Acts::Logging::Level level);
+  explicit TrackParameterSmearing(
+      const Config& config,
+      std::unique_ptr<const Acts::Logger> logger = nullptr);
 
   ProcessCode execute(const AlgorithmContext& ctx) const override;
 
@@ -85,6 +91,8 @@ class TrackParameterSmearing final : public IAlgorithm {
   const Config& config() const { return m_cfg; }
 
  private:
+  void logSmearingConfig() const;
+
   Config m_cfg;
 
   ReadDataHandle<TrackParametersContainer> m_inputTrackParameters{

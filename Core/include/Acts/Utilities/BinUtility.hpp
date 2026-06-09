@@ -15,11 +15,10 @@
 #include "Acts/Utilities/Enumerate.hpp"
 #include "Acts/Utilities/ProtoAxis.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <iostream>
-#include <iterator>
-#include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -95,13 +94,6 @@ class BinUtility {
     m_binningData.emplace_back(opt, value, bValues);
   }
 
-  /// Copy constructor
-  ///
-  /// @param sbu is the source bin utility
-  BinUtility(const BinUtility& sbu) = default;
-
-  BinUtility(BinUtility&& sbu) = default;
-
   /// Create from a DirectedProtoAxis
   ///
   /// @param dpAxis the DirectedProtoAxis to be used
@@ -126,23 +118,10 @@ class BinUtility {
     }
   }
 
-  /// Assignment operator
-  ///
-  /// @param sbu is the source bin utility
-  BinUtility& operator=(const BinUtility& sbu) {
-    if (this != &sbu) {
-      m_binningData = sbu.m_binningData;
-      m_transform = sbu.m_transform;
-      m_itransform = sbu.m_itransform;
-    }
-    return (*this);
-  }
-
-  BinUtility& operator=(BinUtility&&) = default;
-
   /// Operator+= to make multidimensional BinUtility
   ///
   /// @param gbu is the additional BinUtility to be chosen
+  /// @return Reference to this BinUtility after addition
   BinUtility& operator+=(const BinUtility& gbu) {
     const std::vector<BinningData>& bData = gbu.binningData();
 
@@ -155,19 +134,20 @@ class BinUtility {
     return (*this);
   }
 
-  /// Virtual Destructor
-  ~BinUtility() = default;
-
   /// Equality operator
+  /// @param other The other BinUtility to compare with
+  /// @return True if the BinUtilities are equal, false otherwise
   bool operator==(const BinUtility& other) const {
     return (m_transform.isApprox(other.m_transform) &&
             m_binningData == other.binningData());
   }
 
   /// Return the binning data vector
+  /// @return Reference to the vector of binning data
   const std::vector<BinningData>& binningData() const { return m_binningData; }
 
   /// Return the total number of bins
+  /// @return Total number of bins across all dimensions
   std::size_t bins() const { return bins(0) * bins(1) * bins(2); }
 
   /// Bin-triple fast access
@@ -204,6 +184,42 @@ class BinUtility {
     return bEval;
   }
 
+  /// Bin from a 2D vector (following local parameters definitions)
+  /// - no optional transform applied
+  /// - USE WITH CARE !!
+  ///
+  /// You need to make sure that the local position is actually in the binning
+  /// frame of the BinUtility
+  ///
+  /// @param lposition is the local position to be set
+  /// @param ba is the bin dimension
+  ///
+  /// @return bin calculated from local
+  std::size_t bin(const Vector2& lposition, std::size_t ba = 0) const {
+    if (ba >= m_binningData.size()) {
+      return 0;
+    }
+    return m_binningData[ba].searchLocal(lposition);
+  }
+
+  /// Bin from a scalar (following local parameters definitions)
+  /// - no optional transform applied
+  /// - USE WITH CARE !!
+  ///
+  /// You need to make sure that the local position is actually in the binning
+  /// frame of the BinUtility
+  ///
+  /// @param value is the scalar value to be evaluated
+  /// @param ba is the bin dimension
+  ///
+  /// @return bin calculated from local
+  std::size_t bin(float value, std::size_t ba = 0) const {
+    if (ba >= m_binningData.size()) {
+      return 0;
+    }
+    return m_binningData[ba].search(value);
+  }
+
   /// Return the other direction for fast interlinking
   ///
   /// @param position is the global position for the next search
@@ -221,23 +237,6 @@ class BinUtility {
     return m_binningData[ba].nextDirection(position, direction);
   }
 
-  /// Bin from a 2D vector (following local parameters defintitions)
-  /// - no optional transform applied
-  /// - USE WITH CARE !!
-  ///
-  /// You need to make sure that the local position is actually in the binning
-  /// frame of the BinUtility
-  ///
-  /// @param lposition is the local position to be set
-  /// @param ba is the bin dimension
-  ///
-  /// @return bin calculated from local
-  std::size_t bin(const Vector2& lposition, std::size_t ba = 0) const {
-    if (ba >= m_binningData.size()) {
-      return 0;
-    }
-    return m_binningData[ba].searchLocal(lposition);
-  }
   /// Check if bin is inside from Vector2 - optional transform applied
   ///
   /// @param position is the global position to be evaluated
@@ -245,14 +244,9 @@ class BinUtility {
   bool inside(const Vector3& position) const {
     /// transform or not
     const Vector3& bPosition = m_itransform * position;
-    // loop and break
-    for (auto& bData : m_binningData) {
-      if (!(bData.inside(bPosition))) {
-        return false;
-      }
-    }
-    // survived all the checks
-    return true;
+    return std::ranges::all_of(m_binningData, [&](const auto& bData) {
+      return bData.inside(bPosition);
+    });
   }
 
   /// First bin maximal value
@@ -304,6 +298,7 @@ class BinUtility {
   /// - this creates a simple std::size_t from a triple object
   ///
   /// @param bin is the bin to be serialized
+  /// @return Serialized bin index as a single std::size_t value
   std::size_t serialize(const std::array<std::size_t, 3>& bin) const {
     std::size_t serializedBin = bin[0];
     if (m_binningData.size() == 2) {

@@ -1,19 +1,29 @@
 name: Report on physmon
 
 on:
-  workflow_run:
+  # workflow_run is required to post results back to PRs from forks; this
+  # workflow runs in the base repo context and does not check out or execute
+  # untrusted PR code.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [Builds]
     types:
       - completed
 
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
 jobs:
   post_comment:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: 'Download artifact'
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         id: dl-af
         with:
           script: |
@@ -42,6 +52,12 @@ jobs:
             fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/physmon.zip`, Buffer.from(download.data));
             let = url = `https://acts-herald.app.cern.ch/view/${process.env.GITHUB_REPOSITORY}/${matchArtifact.id}`;
 
+            // Check if any other comment artifacts are available
+            let matchCommentArtifacts = allArtifacts.data.artifacts.filter((artifact) => {
+              return artifact.name.startsWith('comment-')
+            });
+            core.setOutput('comment-artifacts-found', matchCommentArtifacts.length >= 1);
+
             core.exportVariable('ARTIFACT_URL', url)
             return true;
 
@@ -51,45 +67,46 @@ jobs:
 
 
       - name: 'Determine PR number'
-        uses: actions/github-script@v7
         id: get-pr-number
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            if(!${{ steps.dl-af.outputs.result }}) {
-              console.log("No artifact => no PR number");
-              return false;
-            }
-            let fs = require('fs');
-            let file = 'physmon/pr_number';
-            if(!fs.existsSync(file)) {
-              console.log('No file at ' + file);
-              return false;
-            }
-
-
-            let number = Number(fs.readFileSync(file, {encoding: 'utf8'}).trim());
-            console.log('PR number is '+number);
-            core.exportVariable('PR_NUMBER', number)
-
-            let sha = fs.readFileSync('physmon/sha', {encoding: 'utf8'}).trim();
-            console.log('SHA is '+sha);
-            core.exportVariable('PR_SHA', sha)
-
-            return number;
+        if: steps.dl-af.outputs.result != 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_TARGET_REPO: ${{ github.repository }}
+          PR_BRANCH: |-
+            ${{
+              (github.event.workflow_run.head_repository.owner.login != github.event.workflow_run.repository.owner.login)
+                && format('{0}:{1}', github.event.workflow_run.head_repository.owner.login, github.event.workflow_run.head_branch)
+                || github.event.workflow_run.head_branch
+            }}
+        run: |
+          gh pr view --repo "${PR_TARGET_REPO}" "${PR_BRANCH}" \
+            --json 'number,headRefOid' \
+            --jq '"PR_NUMBER=\(.number)\nPR_SHA=\(.headRefOid)"' \
+            >> $GITHUB_OUTPUT
 
 
       # ping the url, triggers caching of the artifact
       - name: Prime cache
-        if: steps.get-pr-number.outputs.result != 'false'
+        if: steps.get-pr-number.outcome == 'success'
         run: curl -sL $ARTIFACT_URL
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
         with:
-          python-version: '3.12'
+          python-version: '3.14'
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: steps.dl-af.outputs.comment-artifacts-found
+        with:
+          pattern: comment-*.md
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.event.workflow_run.repository.full_name }}
+          run-id: ${{ github.event.workflow_run.id }}
 
       - name: Render comment
-        if: steps.get-pr-number.outputs.result != 'false'
+        if: steps.get-pr-number.outcome == 'success'
+        env:
+          PR_SHA: ${{ steps.get-pr-number.outputs.PR_SHA }}
         run: |
           ls -al $GITHUB_WORKSPACE/physmon
           echo "# 📊: Physics performance monitoring for ${PR_SHA}" >> comment.md
@@ -99,22 +116,45 @@ jobs:
           else
             echo "🟥 summary not found!" >> comment.md
           fi
+          cat comment-*.md >> comment.md || true
           cat comment.md
 
       - name: Find Comment
-        if: steps.get-pr-number.outputs.result != 'false'
-        uses: peter-evans/find-comment@v3
+        if: steps.get-pr-number.outcome == 'success'
+        uses: peter-evans/find-comment@b30e6a3c0ed37e7c023ccd3f1db5c6c0b0c23aad # v4.0.0
         id: fc
         with:
-          issue-number: ${{ steps.get-pr-number.outputs.result }}
+          issue-number: ${{ steps.get-pr-number.outputs.PR_NUMBER }}
           comment-author: 'github-actions[bot]'
           body-includes: Physics performance monitoring
 
       - name: Create or update comment
-        if: steps.get-pr-number.outputs.result != 'false'
-        uses: peter-evans/create-or-update-comment@v4
+        if: steps.get-pr-number.outcome == 'success'
+        uses: peter-evans/create-or-update-comment@e8674b075228eee787fea43ef493e45ece1004c9 # v5.0.0
         with:
           comment-id: ${{ steps.fc.outputs.comment-id }}
-          issue-number: ${{ steps.get-pr-number.outputs.result }}
+          issue-number: ${{ steps.get-pr-number.outputs.PR_NUMBER }}
           body-file: comment.md
           edit-mode: replace
+
+      - name: Post failure notifications to EIC/ePIC mattermost
+        if: steps.get-pr-number.outcome == 'success'
+        env:
+          EIC_EPIC_MATTERMOST_HOOK_URL: ${{secrets.EIC_EPIC_MATTERMOST_HOOK_URL}}
+          PR_NUMBER: ${{ steps.get-pr-number.outputs.PR_NUMBER }}
+        run: |
+          if [ -f comment-50-external-failure.md ] ; then
+            echo "{\"text\":\"External pipeline failure in ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}?pr=${PR_NUMBER}.\"}" | tee data.json
+            curl -X POST -H 'Content-type: application/json' --data "@data.json" ${EIC_EPIC_MATTERMOST_HOOK_URL}
+          fi
+
+      - name: Post failure notifications to Key4hep mattermost
+        if: steps.get-pr-number.outcome == 'success'
+        env:
+          KEY4HEP_MATTERMOST_HOOK_URL: ${{secrets.KEY4HEP_MATTERMOST_HOOK_URL}}
+          PR_NUMBER: ${{ steps.get-pr-number.outputs.PR_NUMBER }}
+        run: |
+          if [ -f comment-51-key4hep-external-failure.md ] ; then
+            echo "{\"text\":\"External pipeline failure in ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}?pr=${PR_NUMBER}.\"}" | tee data.json
+            curl -X POST -H 'Content-type: application/json' --data "@data.json" ${KEY4HEP_MATTERMOST_HOOK_URL}
+          fi

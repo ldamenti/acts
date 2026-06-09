@@ -3,7 +3,6 @@
 import os
 import argparse
 import pathlib
-import math
 
 import acts
 import acts.examples
@@ -53,6 +52,13 @@ parser.add_argument(
 )
 parser.add_argument("--events", "-n", help="Number of events", type=int, default=100)
 parser.add_argument("--skip", "-s", help="Number of events", type=int, default=0)
+parser.add_argument(
+    "--jobs",
+    "-j",
+    help="Number of worker threads (-1 uses all cores)",
+    type=int,
+    default=None,
+)
 parser.add_argument("--edm4hep", help="Use edm4hep inputs", type=pathlib.Path)
 parser.add_argument(
     "--geant4", help="Use Geant4 instead of fatras", action="store_true"
@@ -128,19 +134,25 @@ parser.add_argument(
 parser.add_argument(
     "--output-root",
     help="Switch root output on/off",
-    default=True,
+    default=False,
     action=argparse.BooleanOptionalAction,
 )
 parser.add_argument(
     "--output-csv",
     help="Switch csv output on/off",
-    default=True,
+    default=False,
     action=argparse.BooleanOptionalAction,
 )
 parser.add_argument(
     "--output-obj",
     help="Switch obj output on/off",
-    default=True,
+    default=False,
+    action=argparse.BooleanOptionalAction,
+)
+parser.add_argument(
+    "--output-parquet",
+    help="Switch parquet output on/off (requires ACTS_BUILD_EXAMPLES_PARQUET=ON)",
+    default=False,
     action=argparse.BooleanOptionalAction,
 )
 
@@ -152,7 +164,8 @@ ambi_scoring = args.ambi_solver == "scoring"
 ambi_config = args.ambi_config
 seedFilter_ML = args.MLSeedFilter
 geoDir = getOpenDataDetectorDirectory()
-# acts.examples.dump_args_calls(locals())  # show python binding calls
+actsDir = pathlib.Path(__file__).parent.parent.parent.parent
+# acts.examples.dump_args_calls()  # show python binding calls
 
 oddMaterialMap = (
     args.material_config
@@ -163,13 +176,13 @@ oddMaterialMap = (
 oddDigiConfig = (
     args.digi_config
     if args.digi_config
-    else geoDir / "config/odd-digi-smearing-config.json"
+    else actsDir / "Examples/Configs/odd-digi-smearing-config.json"
 )
 
-oddSeedingSel = geoDir / "config/odd-seeding-config.json"
+oddSeedingSel = actsDir / "Examples/Configs/odd-seeding-config.json"
 oddMaterialDeco = acts.IMaterialDecorator.fromFile(oddMaterialMap)
 
-detector = getOpenDataDetector(odd_dir=geoDir, mdecorator=oddMaterialDeco)
+detector = getOpenDataDetector(odd_dir=geoDir, materialDecorator=oddMaterialDeco)
 trackingGeometry = detector.trackingGeometry()
 decorators = detector.contextDecorators()
 field = acts.ConstantBField(acts.Vector3(0.0, 0.0, 2.0 * u.T))
@@ -178,15 +191,25 @@ rnd = acts.examples.RandomNumbers(seed=42)
 s = acts.examples.Sequencer(
     events=args.events,
     skip=args.skip,
-    numThreads=1 if args.geant4 else -1,
+    numThreads=args.jobs if args.jobs is not None else (1 if args.geant4 else -1),
     outputDir=str(outputDir),
 )
 
 if args.edm4hep:
     import acts.examples.edm4hep
+    from acts.examples.edm4hep import PodioReader
 
-    edm4hepReader = acts.examples.edm4hep.EDM4hepSimReader(
-        inputPath=str(args.edm4hep),
+    s.addReader(
+        PodioReader(
+            level=acts.logging.DEBUG,
+            inputPath=str(args.edm4hep),
+            outputFrame="events",
+            category="events",
+        )
+    )
+
+    edm4hepReader = acts.examples.edm4hep.EDM4hepSimInputConverter(
+        inputFrame="events",
         inputSimHits=[
             "PixelBarrelReadout",
             "PixelEndcapReadout",
@@ -198,15 +221,18 @@ if args.edm4hep:
         outputParticlesGenerator="particles_generated",
         outputParticlesSimulation="particles_simulated",
         outputSimHits="simhits",
-        graphvizOutput="graphviz",
+        outputSimVertices="vertices_truth",
         dd4hepDetector=detector,
         trackingGeometry=trackingGeometry,
-        sortSimHitsInTime=True,
-        level=acts.logging.INFO,
+        sortSimHitsInTime=False,
+        particleRMax=1080 * u.mm,
+        particleZ=(-3030 * u.mm, 3030 * u.mm),
+        particlePtMin=150 * u.MeV,
+        level=acts.logging.DEBUG,
     )
-    s.addReader(edm4hepReader)
+    s.addAlgorithm(edm4hepReader)
 
-    s.addWhiteboardAlias("particles", edm4hepReader.config.outputParticlesGenerator)
+    s.addWhiteboardAlias("particles", edm4hepReader.config.outputParticlesSimulation)
 
     addSimParticleSelection(
         s,
@@ -214,7 +240,6 @@ if args.edm4hep:
             rho=(0.0, 24 * u.mm),
             absZ=(0.0, 1.0 * u.m),
             eta=(-3.0, 3.0),
-            pt=(150 * u.MeV, None),
             removeNeutral=True,
         ),
     )
@@ -328,11 +353,13 @@ if args.reco:
             1 * u.mm,
             1 * u.degree,
             1 * u.degree,
-            0.1 * u.e / u.GeV,
+            0 * u.e / u.GeV,
             1 * u.ns,
         ],
+        initialSigmaQoverPt=0.1 * u.e / u.GeV,
         initialSigmaPtRel=0.1,
         initialVarInflation=[1.0] * 6,
+        particleHypothesis=acts.ParticleHypothesis.muon,
         geoSelectionConfigFile=oddSeedingSel,
         outputDirRoot=outputDir if args.output_root else None,
         outputDirCsv=outputDir if args.output_csv else None,
@@ -365,7 +392,7 @@ if args.reco:
         CkfConfig(
             chi2CutOffMeasurement=15.0,
             chi2CutOffOutlier=25.0,
-            numMeasurementsCutOff=10,
+            numMeasurementsCutOff=2,
             seedDeduplication=True,
             stayOnSeed=True,
             pixelVolumes=[16, 17, 18],
@@ -439,6 +466,92 @@ if args.reco:
         field,
         vertexFinder=VertexFinder.AMVF,
         outputDirRoot=outputDir if args.output_root else None,
+        outputDirCsv=outputDir if args.output_csv else None,
+    )
+
+if args.output_parquet:
+    try:
+        from acts.arrow import (
+            particleSchema,
+            simHitSchema,
+            trackSchema,
+        )
+        from acts.examples.arrow import (
+            ArrowParticleOutputConverter,
+            ArrowSimHitOutputConverter,
+            ArrowTrackOutputConverter,
+            makeVolumeIdDetectorResolver,
+            ParquetWriter,
+        )
+    except ImportError as e:
+        raise RuntimeError(
+            "Parquet output requested but acts.examples.arrow is not available; "
+            "rebuild with ACTS_BUILD_EXAMPLES_PARQUET=ON."
+        ) from e
+
+    # ODD volume -> detector enum mapping used in parquet simhit export.
+    # 0..8 are subdetector-specific enums; 255 marks unknown/unmatched.
+    _odd_detector_resolver = makeVolumeIdDetectorResolver(
+        {
+            7: 0,  # pixel_neg_endcap
+            8: 1,  # pixel_barrel
+            9: 2,  # pixel_pos_endcap
+            12: 3,  # short_neg_endcap
+            13: 4,  # short_barrel
+            14: 5,  # short_pos_endcap
+            16: 6,  # long_neg_endcap
+            17: 7,  # long_barrel
+            18: 8,  # long_pos_endcap
+        },
+        255,
+    )
+
+    # Each converter parks an arrow::Table on the whiteboard under a fresh
+    # key, and one ParquetWriter picks them all up.
+    arrParticleConv = ArrowParticleOutputConverter(
+        level=acts.logging.INFO,
+        inputParticles="particles_simulated",
+        outputTable="particles_arrow",
+    )
+    s.addAlgorithm(arrParticleConv)
+
+    arrSimHitConv = ArrowSimHitOutputConverter(
+        level=acts.logging.INFO,
+        inputSimHits="simhits",
+        inputParticles="particles_simulated",
+        inputClusters="clusters",
+        inputSimHitMeasurementsMap="simhit_measurements_map",
+        outputTable="simhits_arrow",
+        detectorResolver=_odd_detector_resolver,
+    )
+    s.addAlgorithm(arrSimHitConv)
+
+    if args.reco:
+        arrTrackConv = ArrowTrackOutputConverter(
+            level=acts.logging.INFO,
+            inputTracks="tracks",
+            inputTrackParticleMatching="track_particle_matching",
+            inputParticles="particles_simulated",
+            inputMeasurementSimHitsMap="measurement_simhits_map",
+            outputTable="tracks_arrow",
+        )
+        s.addAlgorithm(arrTrackConv)
+
+    s.addWriter(
+        ParquetWriter(
+            level=acts.logging.INFO,
+            outputDir=str(outputDir),
+            collections={
+                arrSimHitConv.config.outputTable: "simhits",
+                arrTrackConv.config.outputTable: "tracks",
+                arrParticleConv.config.outputTable: "particles",
+            },
+            expectedSchemas={
+                arrSimHitConv.config.outputTable: simHitSchema(),
+                arrTrackConv.config.outputTable: trackSchema(),
+                arrParticleConv.config.outputTable: particleSchema(),
+            },
+        )
     )
 
 s.run()

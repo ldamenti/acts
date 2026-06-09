@@ -9,12 +9,12 @@
 #include "ActsExamples/Vertexing/AdaptiveMultiVertexFinderAlgorithm.hpp"
 
 #include "Acts/Definitions/Algebra.hpp"
-#include "Acts/Definitions/Units.hpp"
-#include "Acts/EventData/GenericBoundTrackParameters.hpp"
+#include "Acts/EventData/BoundTrackParameters.hpp"
 #include "Acts/Propagator/SympyStepper.hpp"
 #include "Acts/Utilities/AnnealingUtility.hpp"
 #include "Acts/Utilities/Logger.hpp"
 #include "Acts/Utilities/Result.hpp"
+#include "Acts/Vertexing/AdaptiveGridDensityVertexFinder.hpp"
 #include "Acts/Vertexing/AdaptiveGridTrackDensity.hpp"
 #include "Acts/Vertexing/AdaptiveMultiVertexFinder.hpp"
 #include "Acts/Vertexing/AdaptiveMultiVertexFitter.hpp"
@@ -23,13 +23,10 @@
 #include "Acts/Vertexing/TrackAtVertex.hpp"
 #include "Acts/Vertexing/TrackDensityVertexFinder.hpp"
 #include "Acts/Vertexing/Vertex.hpp"
-#include "Acts/Vertexing/VertexingOptions.hpp"
-#include "ActsExamples/EventData/ProtoVertex.hpp"
 #include "ActsExamples/EventData/SimParticle.hpp"
 #include "ActsExamples/EventData/SimVertex.hpp"
 #include "ActsExamples/Framework/AlgorithmContext.hpp"
 #include "ActsExamples/Framework/ProcessCode.hpp"
-#include "ActsExamples/TruthTracking/TruthVertexFinder.hpp"
 
 #include <algorithm>
 #include <memory>
@@ -37,7 +34,6 @@
 #include <ostream>
 #include <stdexcept>
 #include <system_error>
-#include <unordered_map>
 #include <utility>
 
 #include "TruthVertexSeeder.hpp"
@@ -46,8 +42,8 @@
 namespace ActsExamples {
 
 AdaptiveMultiVertexFinderAlgorithm::AdaptiveMultiVertexFinderAlgorithm(
-    const Config& config, Acts::Logging::Level level)
-    : IAlgorithm("AdaptiveMultiVertexFinder", level),
+    const Config& config, std::unique_ptr<const Acts::Logger> logger)
+    : IAlgorithm("AdaptiveMultiVertexFinder", std::move(logger)),
       m_cfg(config),
       m_propagator{[&]() {
         // Set up SympyStepper
@@ -61,15 +57,16 @@ AdaptiveMultiVertexFinderAlgorithm::AdaptiveMultiVertexFinderAlgorithm(
         Acts::ImpactPointEstimator::Config ipEstimatorCfg(m_cfg.bField,
                                                           m_propagator);
         return Acts::ImpactPointEstimator(
-            ipEstimatorCfg, logger().cloneWithSuffix("ImpactPointEstimator"));
+            ipEstimatorCfg,
+            this->logger().cloneWithSuffix("ImpactPointEstimator"));
       }()},
       m_linearizer{[&] {
         // Set up the helical track linearizer
         Linearizer::Config ltConfig;
         ltConfig.bField = m_cfg.bField;
         ltConfig.propagator = m_propagator;
-        return Linearizer(ltConfig,
-                          logger().cloneWithSuffix("HelicalTrackLinearizer"));
+        return Linearizer(
+            ltConfig, this->logger().cloneWithSuffix("HelicalTrackLinearizer"));
       }()},
       m_vertexSeeder{makeVertexSeeder()},
       m_vertexFinder{makeVertexFinder(m_vertexSeeder)} {
@@ -91,7 +88,9 @@ AdaptiveMultiVertexFinderAlgorithm::AdaptiveMultiVertexFinderAlgorithm(
   if (m_cfg.seedFinder != SeedFinder::TruthSeeder &&
       (!m_cfg.inputTruthParticles.empty() ||
        !m_cfg.inputTruthVertices.empty())) {
-    ACTS_INFO("Ignoring truth input as seed finder is not TruthSeeder");
+    ACTS_LOG_WITH_LOGGER(
+        this->logger(), Acts::Logging::INFO,
+        "Ignoring truth input as seed finder is not TruthSeeder");
     m_cfg.inputTruthVertices.clear();
     m_cfg.inputTruthVertices.clear();
   }
@@ -106,10 +105,11 @@ AdaptiveMultiVertexFinderAlgorithm::AdaptiveMultiVertexFinderAlgorithm(
 std::unique_ptr<Acts::IVertexFinder>
 AdaptiveMultiVertexFinderAlgorithm::makeVertexSeeder() const {
   if (m_cfg.seedFinder == SeedFinder::TruthSeeder) {
-    using Seeder = ActsExamples::TruthVertexSeeder;
+    using Seeder = TruthVertexSeeder;
     Seeder::Config seederConfig;
     seederConfig.useXY = false;
     seederConfig.useTime = m_cfg.useTime;
+    seederConfig.simultaneousSeeds = m_cfg.simultaneousSeeds;
     return std::make_unique<Seeder>(seederConfig);
   }
 
@@ -271,7 +271,7 @@ ProcessCode AdaptiveMultiVertexFinderAlgorithm::execute(
   // Default vertexing options, this is where e.g. a constraint could be set
   Options finderOpts(ctx.geoContext, ctx.magFieldContext);
 
-  VertexCollection vertices;
+  VertexContainer vertices;
 
   if (inputTrackParameters.empty()) {
     ACTS_DEBUG("Empty track parameter collection found, skipping vertexing");
@@ -289,7 +289,7 @@ ProcessCode AdaptiveMultiVertexFinderAlgorithm::execute(
   }
 
   // show some debug output
-  ACTS_INFO("Found " << vertices.size() << " vertices in event");
+  ACTS_DEBUG("Found " << vertices.size() << " vertices in event");
   for (const auto& vtx : vertices) {
     ACTS_DEBUG("Found vertex at " << vtx.fullPosition().transpose() << " with "
                                   << vtx.tracks().size() << " tracks.");

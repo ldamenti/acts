@@ -8,11 +8,7 @@
 
 #pragma once
 
-#include "Acts/EventData/MultiTrajectoryHelpers.hpp"
-#include "Acts/EventData/SourceLink.hpp"
-#include "Acts/EventData/TrackContainer.hpp"
 #include "Acts/EventData/TrackContainerFrontendConcept.hpp"
-#include "Acts/Utilities/Delegate.hpp"
 #include "Acts/Utilities/Logger.hpp"
 
 #include <memory>
@@ -37,6 +33,7 @@ namespace Acts {
 ///  4) Back to square 1.
 class GreedyAmbiguityResolution {
  public:
+  /// Configuration parameters for greedy ambiguity resolution.
   struct Config {
     /// Maximum amount of shared hits per track.
     std::uint32_t maximumSharedHits = 1;
@@ -47,23 +44,34 @@ class GreedyAmbiguityResolution {
     std::size_t nMeasurementsMin = 7;
   };
 
+  /// Mutable state used by the greedy ambiguity resolution.
   struct State {
+    /// Total number of tracks
     std::size_t numberOfTracks{};
 
+    /// Track tips for each track
     std::vector<int> trackTips;
+    /// Chi-squared value for each track
     std::vector<float> trackChi2;
+    /// Measurement indices for each track
     std::vector<std::vector<std::size_t>> measurementsPerTrack;
 
     // TODO consider boost 1.81 unordered_flat_map
+    /// Map from measurement index to set of track indices using it
     boost::container::flat_map<std::size_t,
                                boost::container::flat_set<std::size_t>>
         tracksPerMeasurement;
+    /// Number of shared measurements for each track
     std::vector<std::size_t> sharedMeasurementsPerTrack;
 
     // TODO consider boost 1.81 unordered_flat_map
+    /// Set of track indices selected as good tracks
     boost::container::flat_set<std::size_t> selectedTracks;
   };
 
+  /// Constructor with configuration and logger
+  /// @param cfg Configuration for ambiguity resolution
+  /// @param logger Logger for diagnostic output
   explicit GreedyAmbiguityResolution(
       const Config& cfg,
       std::unique_ptr<const Logger> logger =

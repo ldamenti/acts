@@ -6,11 +6,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-#include "Acts/Plugins/Json/GridJsonConverter.hpp"
+#include "ActsPlugins/Json/GridJsonConverter.hpp"
 
-#include "Acts/Plugins/Json/AlgebraJsonConverter.hpp"
-#include "Acts/Plugins/Json/UtilitiesJsonConverter.hpp"
 #include "Acts/Utilities/IAxis.hpp"
+#include "ActsPlugins/Json/AlgebraJsonConverter.hpp"
+#include "ActsPlugins/Json/UtilitiesJsonConverter.hpp"
 
 nlohmann::json Acts::AxisJsonConverter::toJson(const IAxis& ia) {
   nlohmann::json jAxis;
@@ -28,21 +28,19 @@ nlohmann::json Acts::AxisJsonConverter::toJson(const IAxis& ia) {
   return jAxis;
 }
 
-nlohmann::json Acts::AxisJsonConverter::toJsonDetray(const IAxis& ia) {
-  nlohmann::json jAxis;
-  jAxis["bounds"] =
-      ia.getBoundaryType() == Acts::AxisBoundaryType::Bound ? 1 : 2;
-  jAxis["binning"] = ia.isEquidistant() ? 0 : 1;
-  jAxis["bins"] = ia.getNBins();
-  if (ia.isEquidistant()) {
-    std::array<double, 2u> range = {ia.getBinEdges().front(),
-                                    ia.getBinEdges().back()};
-    jAxis["edges"] = range;
+std::unique_ptr<Acts::IAxis> Acts::AxisJsonConverter::fromJson(
+    const nlohmann::json& jAxis) {
+  Acts::AxisType axisType = jAxis.at("type");
+  Acts::AxisBoundaryType boundaryType = jAxis.at("boundary_type");
 
-  } else {
-    jAxis["edges"] = ia.getBinEdges();
+  if (axisType == Acts::AxisType::Equidistant) {
+    std::array<double, 2u> range = jAxis.at("range");
+    return Acts::IAxis::createEquidistant(boundaryType, range.at(0),
+                                          range.at(1), jAxis.at("bins"));
   }
-  return jAxis;
+
+  return Acts::IAxis::createVariable(
+      boundaryType, jAxis.at("boundaries").get<std::vector<double>>());
 }
 
 namespace {

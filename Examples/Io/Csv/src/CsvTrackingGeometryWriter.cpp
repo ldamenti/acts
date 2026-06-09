@@ -21,7 +21,6 @@
 #include "Acts/Surfaces/Surface.hpp"
 #include "Acts/Surfaces/SurfaceArray.hpp"
 #include "Acts/Surfaces/SurfaceBounds.hpp"
-#include "Acts/Utilities/BinnedArray.hpp"
 #include "Acts/Utilities/IAxis.hpp"
 #include "Acts/Utilities/Logger.hpp"
 #include "ActsExamples/Framework/AlgorithmContext.hpp"
@@ -31,15 +30,14 @@
 #include <array>
 #include <cstddef>
 #include <stdexcept>
-#include <utility>
 #include <vector>
 
 #include "CsvOutputData.hpp"
 
-using namespace ActsExamples;
+namespace ActsExamples {
 
-CsvTrackingGeometryWriter::CsvTrackingGeometryWriter(
-    const CsvTrackingGeometryWriter::Config& config, Acts::Logging::Level level)
+CsvTrackingGeometryWriter::CsvTrackingGeometryWriter(const Config& config,
+                                                     Acts::Logging::Level level)
     : m_cfg(config),
       m_logger(Acts::getDefaultLogger("CsvTrackingGeometryWriter", level))
 
@@ -59,9 +57,9 @@ std::string CsvTrackingGeometryWriter::name() const {
 
 namespace {
 
-using SurfaceWriter = ActsExamples::NamedTupleCsvWriter<SurfaceData>;
-using SurfaceGridWriter = ActsExamples::NamedTupleCsvWriter<SurfaceGridData>;
-using LayerVolumeWriter = ActsExamples::NamedTupleCsvWriter<LayerVolumeData>;
+using SurfaceWriter = BoostDescribeCsvWriter<SurfaceData>;
+using SurfaceGridWriter = BoostDescribeCsvWriter<SurfaceGridData>;
+using LayerVolumeWriter = BoostDescribeCsvWriter<LayerVolumeData>;
 using BoundarySurface = Acts::BoundarySurfaceT<Acts::TrackingVolume>;
 
 /// Write a single surface.
@@ -73,13 +71,14 @@ void fillSurfaceData(SurfaceData& data, const Acts::Surface& surface,
   data.boundary_id = surface.geometryId().boundary();
   data.layer_id = surface.geometryId().layer();
   data.module_id = surface.geometryId().sensitive();
+  data.extra_id = surface.geometryId().extra();
   // center position
   auto center = surface.center(geoCtx);
   data.cx = center.x() / Acts::UnitConstants::mm;
   data.cy = center.y() / Acts::UnitConstants::mm;
   data.cz = center.z() / Acts::UnitConstants::mm;
   // rotation matrix components are unit-less
-  auto transform = surface.transform(geoCtx);
+  auto transform = surface.localToGlobalTransform(geoCtx);
   data.rot_xu = transform(0, 0);
   data.rot_xv = transform(0, 1);
   data.rot_xw = transform(0, 2);
@@ -108,9 +107,8 @@ void fillSurfaceData(SurfaceData& data, const Acts::Surface& surface,
     (*dataBoundParameters[ipar]) = boundValues[ipar];
   }
 
-  if (surface.associatedDetectorElement() != nullptr) {
-    data.module_t = surface.associatedDetectorElement()->thickness() /
-                    Acts::UnitConstants::mm;
+  if (surface.isSensitive()) {
+    data.module_t = surface.thickness() / Acts::UnitConstants::mm;
   }
 }
 
@@ -226,7 +224,7 @@ void writeVolume(SurfaceWriter& sfWriter, SurfaceGridWriter& sfGridWriter,
                  bool writeLayerVolume, const Acts::GeometryContext& geoCtx) {
   // process all layers that are directly stored within this volume
   if (volume.confinedLayers() != nullptr) {
-    const auto& vTransform = volume.transform();
+    const auto& vTransform = volume.localToGlobalTransform(geoCtx);
 
     // Get the values of the volume boundaries
     std::vector<double> volumeBoundValues = volume.volumeBounds().values();
@@ -289,7 +287,8 @@ void writeVolume(SurfaceWriter& sfWriter, SurfaceGridWriter& sfGridWriter,
           if (rVolume->volumeBounds().type() == Acts::VolumeBounds::eCylinder) {
             bool last = (layerIdx + 2 ==
                          volume.confinedLayers()->arrayObjects().size());
-            writeCylinderLayerVolume(lvWriter, *layer, rVolume->transform(),
+            writeCylinderLayerVolume(lvWriter, *layer,
+                                     rVolume->localToGlobalTransform(geoCtx),
                                      representingBoundValues, volumeBoundValues,
                                      lastBoundValues, last);
           }
@@ -392,6 +391,9 @@ ProcessCode CsvTrackingGeometryWriter::finalize() {
 
   writeVolume(sfWriter, sfGridWriter, lvWriter, *m_world, m_cfg.writeSensitive,
               m_cfg.writeBoundary, m_cfg.writeSurfaceGrid,
-              m_cfg.writeLayerVolume, Acts::GeometryContext());
+              m_cfg.writeLayerVolume,
+              Acts::GeometryContext::dangerouslyDefaultConstruct());
   return ProcessCode::SUCCESS;
 }
+
+}  // namespace ActsExamples
